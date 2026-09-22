@@ -47,3 +47,41 @@ Confirm the rows were inserted into your local D1 instance:
 npx wrangler d1 execute student_timetable_db --local --command="SELECT * FROM subjects;"
 
 ```
+
+
+The error occurs because `0001_init.sql` is located inside the `migrations/` directory, not the current root directory (`api/`).
+
+Run either of the following commands from `D:\ALL-APP-FILES\timetable-app\api`:
+
+### Option 1: Use the Official Migration Command (Recommended)
+
+Because `migrations_dir = "migrations"` is already set in your `wrangler.toml`, Wrangler will automatically detect and apply all numbered SQL files inside `migrations/`:
+
+```bash
+npx wrangler d1 migrations apply student_timetable_db --local
+
+```
+
+---
+
+### Option 2: Provide the Correct Relative Path to `--file`
+
+If executing directly via the `--file` flag, update the path to point into the `migrations` folder:
+
+```bash
+npx wrangler d1 execute student_timetable_db --local --file=./migrations/0001_init.sql
+
+```
+
+---
+
+### Verify Execution
+
+Verify that the tables were created successfully:
+
+```bash
+npx wrangler d1 execute student_timetable_db --local --command="PRAGMA table_list;"
+
+```
+
+You will see `users`, `session_categories`, `subjects`, `timetable_slots`, and `attendance_records` listed in the output table.

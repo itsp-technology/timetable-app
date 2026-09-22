@@ -14,10 +14,12 @@ import {
   useWindowDimensions,
   ScrollView,
 } from 'react-native';
-import { db, initLocalDatabase, queueMutation, CategoryItem } from './src/db/client';
-import { runSync } from './src/db/syncEngine';
+import { db, initLocalDatabase, queueMutation, CategoryItem, GUEST_USER_ID } from './src/db/client';
 import { THEMES, ThemeKey } from './src/theme/themes';
 import { getAppStyles } from './src/styles/appStyles';
+import { authService, AuthUser } from './src/services/authService';
+import { syncService } from './src/services/syncService';
+import { AuthModal } from './src/components/AuthModal';
 import {
   dispatchNotification,
   requestSystemNotificationPermission,
@@ -90,25 +92,28 @@ export default function App() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
-  // Active Theme
+  // Active Theme & Modals
   const [currentThemeKey, setCurrentThemeKey] = useState<ThemeKey>('midnight');
   const [isThemeModalOpen, setIsThemeModalOpen] = useState<boolean>(false);
-  const [userId, setUserId] = useState<string>('');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+
+  // Authentication & User State
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(authService.getCurrentUser());
+  const activeUserId = currentUser ? currentUser.id : GUEST_USER_ID;
+
+  // Goal & Countdown States
   const [examName, setExamName] = useState<string>('Target Competitive Exam');
   const [examDate, setExamDate] = useState<string>('');
   const [isGoalModalOpen, setIsGoalModalOpen] = useState<boolean>(false);
+  const [tempExamName, setTempExamName] = useState<string>('');
+  const [tempExamDate, setTempExamDate] = useState<string>('');
 
-  // Notifications State & Settings
+  // Notification Engine States
   const [notifEnabled, setNotifEnabled] = useState<boolean>(true);
   const [leadMinutes, setLeadMinutes] = useState<number>(10);
   const [enablePostSessionCheck, setEnablePostSessionCheck] = useState<boolean>(true);
   const [isNotifModalOpen, setIsNotifModalOpen] = useState<boolean>(false);
   const firedAlertsRef = useRef<Set<string>>(new Set());
-
-  // Goal Editor Inputs
-  const [tempExamName, setTempExamName] = useState<string>('');
-  const [tempExamDate, setTempExamDate] = useState<string>('');
-  const [tempUserId, setTempUserId] = useState<string>('');
 
   const activeTheme = THEMES[currentThemeKey];
   const styles = useMemo(() => getAppStyles(activeTheme, isDesktop), [activeTheme, isDesktop]);
@@ -182,7 +187,7 @@ export default function App() {
     setDialog((prev) => ({ ...prev, visible: false }));
   };
 
-  // Sync background color on web to eliminate white side gap
+  // Sync background on web to remove white gap
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       document.body.style.backgroundColor = activeTheme.bg;
@@ -192,20 +197,16 @@ export default function App() {
     }
   }, [activeTheme]);
 
-  // Scheduled Alerts for current visible slots
   const scheduledAlerts: ScheduledAlert[] = useMemo(() => {
     return calculateDayAlerts(slots, leadMinutes, enablePostSessionCheck);
   }, [slots, leadMinutes, enablePostSessionCheck]);
 
-  // Background Watcher: Checks clock every 20 seconds and fires due alerts
+  // Background Alert Watcher
   useEffect(() => {
     if (!notifEnabled) return;
-
     const interval = setInterval(() => {
       const now = new Date();
       const currentDay = now.getDay() === 0 ? 7 : now.getDay();
-
-      // Only fire if the active view day matches today's real day
       if (currentDay !== selectedDay) return;
 
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -225,34 +226,8 @@ export default function App() {
   }, [notifEnabled, scheduledAlerts, selectedDay]);
 
   const handleTestNotification = async () => {
-    const granted = await requestSystemNotificationPermission();
-    dispatchNotification(
-      '🔔 Aspirant Focus Alert',
-      'Operating Systems starts in 10 mins! Goal: 25 questions. Let\'s conquer today\'s target!'
-    );
-    if (!granted && Platform.OS === 'web') {
-      showAppAlert('Permission Notice', 'Sound chime played! To see desktop banners, please enable browser notifications in your site settings.');
-    }
-  };
-
-  const handleToggleNotif = async () => {
-    if (!notifEnabled) {
-      await requestSystemNotificationPermission();
-    }
-    const nextVal = !notifEnabled;
-    setNotifEnabled(nextVal);
-    db.runSync(
-      `INSERT INTO sync_meta (key, value) VALUES ('notif_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
-      [nextVal ? '1' : '0']
-    );
-  };
-
-  const handleSetLeadMinutes = (val: number) => {
-    setLeadMinutes(val);
-    db.runSync(
-      `INSERT INTO sync_meta (key, value) VALUES ('notif_lead', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
-      [val.toString()]
-    );
+    await requestSystemNotificationPermission();
+    dispatchNotification('🔔 Focus Alert', 'Operating Systems starts in 10 mins! Goal: 25 questions.');
   };
 
   const calculatedStartMinutes = useMemo(
@@ -281,15 +256,9 @@ export default function App() {
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }, [examDate]);
 
+  // Load Initial Database State
   useEffect(() => {
     initLocalDatabase();
-
-    const storedUser = db.getFirstSync<{ value: string }>('SELECT value FROM sync_meta WHERE key = ?', ['user_id']);
-    const effectiveUserId = storedUser?.value || `aspirant_${Math.random().toString(36).substring(2, 7)}`;
-    if (!storedUser) {
-      db.runSync(`INSERT INTO sync_meta (key, value) VALUES ('user_id', ?)`, [effectiveUserId]);
-    }
-    setUserId(effectiveUserId);
 
     const storedTheme = db.getFirstSync<{ value: string }>('SELECT value FROM sync_meta WHERE key = ?', ['preferred_theme']);
     if (storedTheme && storedTheme.value in THEMES) {
@@ -302,20 +271,14 @@ export default function App() {
     const storedExamDate = db.getFirstSync<{ value: string }>('SELECT value FROM sync_meta WHERE key = ?', ['exam_date']);
     if (storedExamDate?.value) setExamDate(storedExamDate.value);
 
-    const storedNotif = db.getFirstSync<{ value: string }>('SELECT value FROM sync_meta WHERE key = ?', ['notif_enabled']);
-    if (storedNotif) setNotifEnabled(storedNotif.value === '1');
-
-    const storedLead = db.getFirstSync<{ value: string }>('SELECT value FROM sync_meta WHERE key = ?', ['notif_lead']);
-    if (storedLead) setLeadMinutes(parseInt(storedLead.value, 10));
-
     refreshCategories();
+    refreshSlots();
   }, []);
 
+  // Reload timetable when active user or day changes
   useEffect(() => {
-    if (userId) {
-      refreshSlots();
-    }
-  }, [selectedDay, userId]);
+    refreshSlots();
+  }, [selectedDay, activeUserId]);
 
   const refreshCategories = () => {
     const rows = db.getAllSync<CategoryItem>('SELECT * FROM session_categories');
@@ -343,7 +306,7 @@ export default function App() {
         LEFT JOIN attendance_records a ON a.slot_id = t.id AND a.date = ? AND a.is_deleted = 0
         WHERE t.user_id = ? AND t.day_of_week = ? AND t.is_deleted = 0
         ORDER BY t.start_time_minutes ASC;`,
-        [todayIso, userId, selectedDay]
+        [todayIso, activeUserId, selectedDay]
       );
       setSlots(rows);
     } catch (e) {
@@ -381,12 +344,10 @@ export default function App() {
     setSelectedCategory(catId);
     setNewCatName('');
 
-    if (fromInline) {
-      setIsInlineCatCreatorOpen(false);
-    } else {
-      setIsMainCatModalOpen(false);
-    }
-    showAppAlert('Category Added', `"${newCatName.trim()}" is now ready to use.`);
+    if (fromInline) setIsInlineCatCreatorOpen(false);
+    else setIsMainCatModalOpen(false);
+
+    showAppAlert('Category Added', `"${newCatName.trim()}" is now available.`);
   };
 
   const handleDeleteCategory = (cat: CategoryItem) => {
@@ -438,7 +399,6 @@ export default function App() {
   const handleOpenGoalModal = () => {
     setTempExamName(examName);
     setTempExamDate(examDate);
-    setTempUserId(userId);
     setIsGoalModalOpen(true);
   };
 
@@ -449,18 +409,14 @@ export default function App() {
     }
     const cleanExam = tempExamName.trim();
     const cleanDate = tempExamDate.trim();
-    const cleanUser = tempUserId.trim() || userId;
 
     setExamName(cleanExam);
     setExamDate(cleanDate);
-    setUserId(cleanUser);
 
     db.runSync(`INSERT INTO sync_meta (key, value) VALUES ('exam_name', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`, [cleanExam]);
     db.runSync(`INSERT INTO sync_meta (key, value) VALUES ('exam_date', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`, [cleanDate]);
-    db.runSync(`INSERT INTO sync_meta (key, value) VALUES ('user_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`, [cleanUser]);
 
     setIsGoalModalOpen(false);
-    refreshSlots();
   };
 
   const metrics = useMemo(() => {
@@ -502,7 +458,7 @@ export default function App() {
       `SELECT id FROM timetable_slots
        WHERE user_id = ? AND day_of_week = ? AND is_deleted = 0
          AND MAX(start_time_minutes, ?) < MIN(end_time_minutes, ?);`,
-      [userId, selectedDay, calculatedStartMinutes, calculatedEndMinutes]
+      [activeUserId, selectedDay, calculatedStartMinutes, calculatedEndMinutes]
     );
 
     if (collision) {
@@ -518,7 +474,7 @@ export default function App() {
     db.withTransactionSync(() => {
       const subData = {
         id: subjectId,
-        user_id: userId,
+        user_id: activeUserId,
         name: subjectName.trim(),
         room_number: '',
         created_at: now,
@@ -533,7 +489,7 @@ export default function App() {
 
       const slotData = {
         id: slotId,
-        user_id: userId,
+        user_id: activeUserId,
         subject_id: subjectId,
         day_of_week: selectedDay,
         start_time_minutes: calculatedStartMinutes,
@@ -579,7 +535,7 @@ export default function App() {
 
     const attData = {
       id: attId,
-      user_id: userId,
+      user_id: activeUserId,
       slot_id: slotId,
       date: todayIso,
       status,
@@ -591,7 +547,7 @@ export default function App() {
     db.runSync(
       `INSERT INTO attendance_records (id, user_id, slot_id, date, status, created_at, updated_at, is_deleted)
        VALUES (?, ?, ?, ?, ?, ?, ?, 0);`,
-      [attId, userId, slotId, todayIso, status, now, now]
+      [attId, activeUserId, slotId, todayIso, status, now, now]
     );
 
     queueMutation('attendance_records', attId, attData);
@@ -600,21 +556,28 @@ export default function App() {
 
   const handleCloudSync = async () => {
     setIsSyncing(true);
-    const result = await runSync();
+    const result = await syncService.syncUserTimetable();
     setIsSyncing(false);
     refreshSlots();
     showAppAlert(
-      result.success ? 'Sync Completed' : 'Sync Offline',
-      `Synchronized: ${result.pushed} local changes uploaded | ${result.pulled} remote changes received.`
+      result.success ? 'Sync Completed' : 'Sync Status',
+      result.success
+        ? `Uploaded: ${result.pushed} changes | Downloaded: ${result.pulled} changes.`
+        : (result.error || 'Running in local offline mode.')
     );
   };
+
+  const guestSlotsCount = useMemo(() => {
+    if (currentUser) return syncService.getGuestSlotCount();
+    return 0;
+  }, [currentUser, slots]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle={currentThemeKey === 'light' ? 'dark-content' : 'light-content'} backgroundColor={activeTheme.headerBg} />
 
       <View style={[styles.mainLayout, isDesktop && styles.desktopLayout]}>
-        {/* Top Header: 2-Row Stack */}
+        {/* Top Header */}
         <View style={styles.topHeader}>
           {/* Row 1: Title + Action Buttons */}
           <View style={styles.headerTopRow}>
@@ -623,7 +586,17 @@ export default function App() {
             </View>
 
             <View style={styles.headerRightGroup}>
-              {/* Notification Center Trigger */}
+              {/* Auth / Account Profile Button (Updated with Username Tag) */}
+              <TouchableOpacity
+                style={[styles.headerButton, currentUser && { borderColor: activeTheme.primary }]}
+                onPress={() => setIsAuthModalOpen(true)}
+              >
+                <Text style={[styles.headerButtonText, currentUser && { color: activeTheme.primary, fontWeight: '700' }]}>
+                  {currentUser ? `👤 @${currentUser.username || currentUser.name}` : '👤 Guest'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Notification Alerts */}
               <TouchableOpacity style={styles.headerButton} onPress={() => setIsNotifModalOpen(true)}>
                 <Text style={styles.headerButtonText}>🔔 Alerts</Text>
                 {notifEnabled && <View style={styles.notifStatusDot} />}
@@ -631,7 +604,7 @@ export default function App() {
 
               {/* Theme Picker */}
               <TouchableOpacity style={styles.headerButton} onPress={() => setIsThemeModalOpen(true)}>
-                <Text style={styles.headerButtonText}>{activeTheme.icon} Theme</Text>
+                <Text style={styles.headerButtonText}>{activeTheme.icon}</Text>
               </TouchableOpacity>
 
               {/* Cloud Sync */}
@@ -655,6 +628,30 @@ export default function App() {
             </Text>
           </View>
         </View>
+
+        {/* Guest Slots Sync Prompt Banner */}
+        {currentUser && guestSlotsCount > 0 && (
+          <TouchableOpacity
+            style={[styles.notifToggleCard, { marginHorizontal: 12, marginTop: 8, borderColor: activeTheme.primary }]}
+            onPress={async () => {
+              const res = await syncService.mergeGuestSlotsToAccount();
+              refreshSlots();
+              showAppAlert('Sessions Merged', `Successfully transferred ${res.count} local study sessions into your account!`);
+            }}
+          >
+            <View>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: activeTheme.primary }}>
+                📥 Found {guestSlotsCount} offline study session(s)
+              </Text>
+              <Text style={{ fontSize: 10, color: activeTheme.textSecondary }}>
+                Tap here to merge them into your registered account now.
+              </Text>
+            </View>
+            <View style={[styles.notifSwitchBtn, { backgroundColor: activeTheme.primary }]}>
+              <Text style={styles.notifSwitchText}>Merge</Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Real-time Metrics Card */}
         <View style={styles.metricsContainer}>
@@ -693,10 +690,7 @@ export default function App() {
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRailScroll}>
             <TouchableOpacity
-              style={[
-                styles.categoryPill,
-                activeFilterCategory === 'ALL' && styles.categoryPillActive,
-              ]}
+              style={[styles.categoryPill, activeFilterCategory === 'ALL' && styles.categoryPillActive]}
               onPress={() => setActiveFilterCategory('ALL')}
             >
               <Text style={styles.categoryPillText}>⚡ All Sessions</Text>
@@ -711,11 +705,7 @@ export default function App() {
               return (
                 <View
                   key={c.id}
-                  style={[
-                    styles.categoryPill,
-                    isActive && styles.categoryPillActive,
-                    isActive && { borderColor: c.color_hex },
-                  ]}
+                  style={[styles.categoryPill, isActive && styles.categoryPillActive, isActive && { borderColor: c.color_hex }]}
                 >
                   <TouchableOpacity
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
@@ -728,10 +718,7 @@ export default function App() {
                     </View>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.catDeletePillBtn}
-                    onPress={() => handleDeleteCategory(c)}
-                  >
+                  <TouchableOpacity style={styles.catDeletePillBtn} onPress={() => handleDeleteCategory(c)}>
                     <Text style={styles.catDeletePillText}>✕</Text>
                   </TouchableOpacity>
                 </View>
@@ -770,9 +757,7 @@ export default function App() {
               <Text style={styles.emptyIcon}>📝</Text>
               <Text style={styles.emptyTitle}>No sessions scheduled for {DAYS[selectedDay - 1].full}</Text>
               <Text style={styles.emptySub}>
-                {activeFilterCategory !== 'ALL'
-                  ? 'No sessions in this category. Change filter or schedule one.'
-                  : 'Tap "+ Add Study Slot" below to build your study routine.'}
+                {currentUser ? `No sessions found in account "@${currentUser.username || currentUser.name}".` : 'Running in Guest Mode.'} Tap "+ Add Study Slot" to add one.
               </Text>
             </View>
           }
@@ -847,7 +832,18 @@ export default function App() {
           <Text style={styles.fabIcon}>+ Add Study Slot</Text>
         </TouchableOpacity>
 
-        {/* --- MODAL: Study Notification Center --- */}
+        {/* SEPARATE AUTH MODAL */}
+        <AuthModal
+          visible={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          theme={activeTheme}
+          onAuthSuccess={(user) => {
+            setCurrentUser(user);
+            refreshSlots();
+          }}
+        />
+
+        {/* Notification Center Modal */}
         <Modal visible={isNotifModalOpen} animationType="fade" transparent>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, isDesktop && { maxWidth: 460 }]}>
@@ -855,7 +851,6 @@ export default function App() {
                 <Text style={styles.modalHeading}>🔔 Study Alarms & Reminders</Text>
                 <Text style={styles.modalSubheading}>Lead-time focus alerts & post-session wrap-ups</Text>
 
-                {/* Master Switch */}
                 <View style={styles.notifToggleCard}>
                   <View>
                     <Text style={styles.notifToggleTitle}>Enable Study Notifications</Text>
@@ -863,25 +858,23 @@ export default function App() {
                   </View>
                   <TouchableOpacity
                     style={[styles.notifSwitchBtn, notifEnabled && styles.notifSwitchBtnActive]}
-                    onPress={handleToggleNotif}
+                    onPress={() => setNotifEnabled(!notifEnabled)}
                   >
                     <Text style={styles.notifSwitchText}>{notifEnabled ? 'ON' : 'OFF'}</Text>
                   </TouchableOpacity>
                 </View>
 
-                {/* Instant Test Alert */}
                 <TouchableOpacity style={styles.testAlarmBtn} onPress={handleTestNotification}>
                   <Text style={styles.testAlarmBtnText}>🔊 Test Sound & Notification Now</Text>
                 </TouchableOpacity>
 
-                {/* Lead-Time Option */}
                 <Text style={styles.fieldLabel}>Pre-Session Alert Lead Time</Text>
                 <View style={styles.notifLeadPillsRow}>
                   {LEAD_TIME_OPTIONS.map((mins) => (
                     <TouchableOpacity
                       key={mins}
                       style={[styles.notifLeadPill, leadMinutes === mins && styles.notifLeadPillActive]}
-                      onPress={() => handleSetLeadMinutes(mins)}
+                      onPress={() => setLeadMinutes(mins)}
                     >
                       <Text style={[styles.notifLeadPillText, leadMinutes === mins && styles.notifLeadPillTextActive]}>
                         {mins === 0 ? 'Exact Time' : `${mins}m prior`}
@@ -890,7 +883,6 @@ export default function App() {
                   ))}
                 </View>
 
-                {/* Post Session Check Toggle */}
                 <View style={[styles.notifToggleCard, { marginTop: 6 }]}>
                   <View style={{ flex: 1, paddingRight: 8 }}>
                     <Text style={styles.notifToggleTitle}>End-of-Session Review Check</Text>
@@ -898,35 +890,11 @@ export default function App() {
                   </View>
                   <TouchableOpacity
                     style={[styles.notifSwitchBtn, enablePostSessionCheck && styles.notifSwitchBtnActive]}
-                    onPress={() => setEnablePostSessionCheck((prev) => !prev)}
+                    onPress={() => setEnablePostSessionCheck(!enablePostSessionCheck)}
                   >
                     <Text style={styles.notifSwitchText}>{enablePostSessionCheck ? 'ON' : 'OFF'}</Text>
                   </TouchableOpacity>
                 </View>
-
-                {/* Today's Scheduled Alerts Queue */}
-                <Text style={[styles.fieldLabel, { marginTop: 8 }]}>
-                  Scheduled Alarms Today ({scheduledAlerts.length})
-                </Text>
-                <ScrollView style={styles.notifQueueList} nestedScrollEnabled>
-                  {scheduledAlerts.length === 0 ? (
-                    <Text style={{ fontSize: 11, color: activeTheme.textSecondary, textAlign: 'center', padding: 10 }}>
-                      No study blocks scheduled today.
-                    </Text>
-                  ) : (
-                    scheduledAlerts.map((alert) => (
-                      <View key={alert.id} style={styles.notifQueueItem}>
-                        <View style={styles.notifQueueTop}>
-                          <Text style={styles.notifQueueTime}>⏰ {alert.displayTime}</Text>
-                          <Text style={styles.notifQueueType}>
-                            {alert.type === 'pre_session' ? 'Pre-Class' : 'Wrap-Up'}
-                          </Text>
-                        </View>
-                        <Text style={styles.notifQueueMsg} numberOfLines={2}>{alert.message}</Text>
-                      </View>
-                    ))
-                  )}
-                </ScrollView>
 
                 <View style={styles.modalActionGroup}>
                   <TouchableOpacity style={styles.confirmBtn} onPress={() => setIsNotifModalOpen(false)}>
@@ -938,12 +906,12 @@ export default function App() {
           </View>
         </Modal>
 
-        {/* Modal: Goal & Student Settings */}
+        {/* Goal & Countdown Settings */}
         <Modal visible={isGoalModalOpen} animationType="fade" transparent>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, isDesktop && { maxWidth: 420 }]}>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <Text style={styles.modalHeading}>Exam Goal & Identity</Text>
+                <Text style={styles.modalHeading}>Exam Goal Setup</Text>
                 <Text style={styles.modalSubheading}>Configure target exam and calculate countdown</Text>
 
                 <Text style={styles.fieldLabel}>Exam Title</Text>
@@ -964,15 +932,6 @@ export default function App() {
                   onChangeText={setTempExamDate}
                 />
 
-                <Text style={styles.fieldLabel}>Student / User ID</Text>
-                <TextInput
-                  placeholder="e.g. aspirant_01"
-                  placeholderTextColor={activeTheme.textMuted}
-                  style={styles.textInput}
-                  value={tempUserId}
-                  onChangeText={setTempUserId}
-                />
-
                 <View style={styles.modalActionGroup}>
                   <TouchableOpacity style={styles.abortBtn} onPress={() => setIsGoalModalOpen(false)}>
                     <Text style={styles.abortBtnText}>Cancel</Text>
@@ -986,7 +945,7 @@ export default function App() {
           </View>
         </Modal>
 
-        {/* Modal: Theme Selector */}
+        {/* Theme Selector */}
         <Modal visible={isThemeModalOpen} animationType="fade" transparent>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, isDesktop && { maxWidth: 400 }]}>
@@ -1024,7 +983,7 @@ export default function App() {
           </View>
         </Modal>
 
-        {/* Modal: Standalone Main Screen Category Modal */}
+        {/* Standalone Main Screen Category Modal */}
         <Modal visible={isMainCatModalOpen} animationType="fade" transparent>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, isDesktop && { maxWidth: 420 }]}>
@@ -1078,7 +1037,7 @@ export default function App() {
           </View>
         </Modal>
 
-        {/* Modal: Add Study Slot with INLINE Category Creator */}
+        {/* Add Study Slot Modal */}
         <Modal visible={isModalOpen} animationType="slide" transparent>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, isDesktop && { maxWidth: 500 }]}>
@@ -1104,7 +1063,6 @@ export default function App() {
                   onChangeText={setTopicName}
                 />
 
-                {/* Session Category Section */}
                 <View style={styles.categoryLabelRow}>
                   <Text style={[styles.fieldLabel, { marginTop: 0, marginBottom: 0 }]}>Session Category</Text>
                   <TouchableOpacity onPress={() => setIsInlineCatCreatorOpen((prev) => !prev)}>
@@ -1114,7 +1072,6 @@ export default function App() {
                   </TouchableOpacity>
                 </View>
 
-                {/* INLINE CATEGORY CREATOR */}
                 {isInlineCatCreatorOpen && (
                   <View style={styles.inlineCategoryBox}>
                     <View style={styles.inlineCategoryHeader}>
@@ -1125,7 +1082,7 @@ export default function App() {
                     </View>
 
                     <TextInput
-                      placeholder="Category Title (e.g. Mock Analysis)"
+                      placeholder="Category Title"
                       placeholderTextColor={activeTheme.textMuted}
                       style={[styles.textInput, { backgroundColor: activeTheme.surface }]}
                       value={newCatName}
@@ -1167,7 +1124,6 @@ export default function App() {
                   </View>
                 )}
 
-                {/* Category Choices */}
                 <View style={styles.typeSelectorRow}>
                   {categories.map((c) => {
                     const isSelected = selectedCategory === c.id;
@@ -1181,12 +1137,7 @@ export default function App() {
                         onPress={() => setSelectedCategory(c.id)}
                       >
                         <Text style={{ fontSize: 11 }}>{c.icon}</Text>
-                        <Text
-                          style={[
-                            styles.typeChoiceText,
-                            { color: isSelected ? '#FFFFFF' : activeTheme.textSecondary },
-                          ]}
-                        >
+                        <Text style={[styles.typeChoiceText, { color: isSelected ? '#FFFFFF' : activeTheme.textSecondary }]}>
                           {c.name}
                         </Text>
                       </TouchableOpacity>
@@ -1194,21 +1145,16 @@ export default function App() {
                   })}
                 </View>
 
-                {/* Quick Routine Presets */}
                 <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Quick Routines</Text>
                 <View style={styles.quickSlotsRow}>
                   {PRESET_ROUTINES.map((p) => (
-                    <TouchableOpacity
-                      key={p.label}
-                      style={styles.quickSlotChip}
-                      onPress={() => handleApplyPreset(p)}
-                    >
+                    <TouchableOpacity key={p.label} style={styles.quickSlotChip} onPress={() => handleApplyPreset(p)}>
                       <Text style={styles.quickSlotChipText}>{p.label}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
 
-                {/* Digital Watch Time Controls */}
+                {/* Digital Watch Dual Controls */}
                 <View style={styles.dualWatchContainer}>
                   {/* Start Watch */}
                   <View style={styles.watchCard}>
@@ -1250,10 +1196,7 @@ export default function App() {
                         </TouchableOpacity>
                       </View>
 
-                      <TouchableOpacity
-                        style={styles.ampmToggleBtn}
-                        onPress={() => setStartPeriod((p) => (p === 'AM' ? 'PM' : 'AM'))}
-                      >
+                      <TouchableOpacity style={styles.ampmToggleBtn} onPress={() => setStartPeriod((p) => (p === 'AM' ? 'PM' : 'AM'))}>
                         <Text style={styles.ampmToggleText}>{startPeriod}</Text>
                       </TouchableOpacity>
                     </View>
@@ -1299,10 +1242,7 @@ export default function App() {
                         </TouchableOpacity>
                       </View>
 
-                      <TouchableOpacity
-                        style={styles.ampmToggleBtn}
-                        onPress={() => setEndPeriod((p) => (p === 'AM' ? 'PM' : 'AM'))}
-                      >
+                      <TouchableOpacity style={styles.ampmToggleBtn} onPress={() => setEndPeriod((p) => (p === 'AM' ? 'PM' : 'AM'))}>
                         <Text style={styles.ampmToggleText}>{endPeriod}</Text>
                       </TouchableOpacity>
                     </View>
@@ -1320,26 +1260,15 @@ export default function App() {
                   onChangeText={setTargetQuestions}
                 />
 
-                {/* Live Interval Validation Preview Banner */}
-                <View
-                  style={[
-                    styles.previewBanner,
-                    isTimeIntervalValid ? styles.previewBannerValid : styles.previewBannerInvalid,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.previewBannerText,
-                      { color: isTimeIntervalValid ? '#10B981' : '#EF4444' },
-                    ]}
-                  >
+                {/* Live Interval Validation Preview */}
+                <View style={[styles.previewBanner, isTimeIntervalValid ? styles.previewBannerValid : styles.previewBannerInvalid]}>
+                  <Text style={[styles.previewBannerText, { color: isTimeIntervalValid ? '#10B981' : '#EF4444' }]}>
                     {isTimeIntervalValid
                       ? `🕒 ${formatMinutesTo12Hour(calculatedStartMinutes)} → ${formatMinutesTo12Hour(calculatedEndMinutes)} (${durationHours}h)`
                       : '⚠️ End time must be later than start time'}
                   </Text>
                 </View>
 
-                {/* Actions */}
                 <View style={styles.modalActionGroup}>
                   <TouchableOpacity style={styles.abortBtn} onPress={() => setIsModalOpen(false)}>
                     <Text style={styles.abortBtnText}>Dismiss</Text>
@@ -1372,10 +1301,7 @@ export default function App() {
                 )}
 
                 <TouchableOpacity
-                  style={[
-                    styles.customDialogConfirmBtn,
-                    dialog.isDanger && styles.customDialogDangerBtn,
-                  ]}
+                  style={[styles.customDialogConfirmBtn, dialog.isDanger && styles.customDialogDangerBtn]}
                   onPress={() => {
                     closeDialog();
                     if (dialog.onConfirm) dialog.onConfirm();

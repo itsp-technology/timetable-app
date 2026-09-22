@@ -1,5 +1,6 @@
-import { db } from './client';
-import { API_BASE_URL, TEST_USER_ID } from '../utils/constants';
+// mobile/src/db/syncEngine.ts
+import { db, transferGuestDataToUser, getGuestSnapshot } from './client';
+import { API_BASE_URL } from '../utils/constants';
 
 interface PullResponse {
   server_time: number;
@@ -7,11 +8,16 @@ interface PullResponse {
     subjects: any[];
     slots: any[];
     attendance: any[];
+    categories: any[];
   };
 }
 
-export async function runSync(): Promise<{ success: boolean; pushed: number; pulled: number }> {
+export async function runSync(token: string | null, userId: string): Promise<{ success: boolean; pushed: number; pulled: number }> {
   try {
+    if (!token) {
+      return { success: false, pushed: 0, pulled: 0 };
+    }
+
     // 1. Flush local queue (PUSH)
     const queueRows = db.getAllSync<{
       queue_id: number;
@@ -34,7 +40,8 @@ export async function runSync(): Promise<{ success: boolean; pushed: number; pul
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': TEST_USER_ID,
+          Authorization: `Bearer ${token}`,
+          'x-user-id': userId,
         },
         body: JSON.stringify({ mutations }),
       });
@@ -49,12 +56,15 @@ export async function runSync(): Promise<{ success: boolean; pushed: number; pul
     // 2. Fetch remote modifications (PULL)
     const metaRow = db.getFirstSync<{ value: string }>(
       'SELECT value FROM sync_meta WHERE key = ?',
-      ['last_pull']
+      [`last_pull_${userId}`]
     );
     const lastPull = metaRow ? Number(metaRow.value) : 0;
 
     const pullRes = await fetch(`${API_BASE_URL}/api/sync/pull?since=${lastPull}`, {
-      headers: { 'x-user-id': TEST_USER_ID },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-user-id': userId,
+      },
     });
 
     let pulledCount = 0;
@@ -62,90 +72,70 @@ export async function runSync(): Promise<{ success: boolean; pushed: number; pul
       const data = (await pullRes.json()) as PullResponse;
 
       db.withTransactionSync(() => {
-        // Upsert subjects
-        for (const sub of data.changes.subjects) {
+        for (const sub of data.changes.subjects || []) {
           db.runSync(
-            `INSERT INTO subjects (id, user_id, name, course_code, room_number, color_hex, minimum_attendance_pct, created_at, updated_at, is_deleted)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `INSERT INTO subjects (id, user_id, name, room_number, created_at, updated_at, is_deleted)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                name = excluded.name, room_number = excluded.room_number, updated_at = excluded.updated_at, is_deleted = excluded.is_deleted
              WHERE excluded.updated_at > subjects.updated_at;`,
-            [
-              sub.id,
-              sub.user_id,
-              sub.name,
-              sub.course_code,
-              sub.room_number,
-              sub.color_hex,
-              sub.minimum_attendance_pct,
-              sub.created_at,
-              sub.updated_at,
-              sub.is_deleted,
-            ]
+            [sub.id, userId, sub.name, sub.room_number, sub.created_at, sub.updated_at, sub.is_deleted]
           );
         }
 
-        // Upsert timetable slots
-        for (const slot of data.changes.slots) {
+        for (const slot of data.changes.slots || []) {
           db.runSync(
-            `INSERT INTO timetable_slots (id, user_id, subject_id, day_of_week, start_time_minutes, end_time_minutes, slot_type, week_cycle, created_at, updated_at, is_deleted)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `INSERT INTO timetable_slots (id, user_id, subject_id, day_of_week, start_time_minutes, end_time_minutes, slot_type, topic, target_questions, created_at, updated_at, is_deleted)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
-               day_of_week = excluded.day_of_week, start_time_minutes = excluded.start_time_minutes, end_time_minutes = excluded.end_time_minutes, updated_at = excluded.updated_at, is_deleted = excluded.is_deleted
+               day_of_week = excluded.day_of_week, start_time_minutes = excluded.start_time_minutes, end_time_minutes = excluded.end_time_minutes, slot_type = excluded.slot_type, topic = excluded.topic, target_questions = excluded.target_questions, updated_at = excluded.updated_at, is_deleted = excluded.is_deleted
              WHERE excluded.updated_at > timetable_slots.updated_at;`,
-            [
-              slot.id,
-              slot.user_id,
-              slot.subject_id,
-              slot.day_of_week,
-              slot.start_time_minutes,
-              slot.end_time_minutes,
-              slot.slot_type,
-              slot.week_cycle,
-              slot.created_at,
-              slot.updated_at,
-              slot.is_deleted,
-            ]
+            [slot.id, userId, slot.subject_id, slot.day_of_week, slot.start_time_minutes, slot.end_time_minutes, slot.slot_type, slot.topic, slot.target_questions, slot.created_at, slot.updated_at, slot.is_deleted]
           );
         }
 
-        // Upsert attendance records
-        for (const att of data.changes.attendance) {
+        for (const att of data.changes.attendance || []) {
           db.runSync(
             `INSERT INTO attendance_records (id, user_id, slot_id, date, status, created_at, updated_at, is_deleted)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(slot_id, date) DO UPDATE SET
                status = excluded.status, updated_at = excluded.updated_at, is_deleted = excluded.is_deleted
              WHERE excluded.updated_at > attendance_records.updated_at;`,
-            [
-              att.id,
-              att.user_id,
-              att.slot_id,
-              att.date,
-              att.status,
-              att.created_at,
-              att.updated_at,
-              att.is_deleted,
-            ]
+            [att.id, userId, att.slot_id, att.date, att.status, att.created_at, att.updated_at, att.is_deleted]
           );
         }
 
-        // Save server timestamp
         db.runSync(
-          `INSERT INTO sync_meta (key, value) VALUES ('last_pull', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
-          [data.server_time.toString()]
+          `INSERT INTO sync_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+          [`last_pull_${userId}`, data.server_time.toString()]
         );
       });
 
       pulledCount =
-        data.changes.subjects.length +
-        data.changes.slots.length +
-        data.changes.attendance.length;
+        (data.changes.subjects?.length || 0) +
+        (data.changes.slots?.length || 0) +
+        (data.changes.attendance?.length || 0);
     }
 
     return { success: true, pushed: pushedCount, pulled: pulledCount };
   } catch (error) {
     console.error('Sync failed:', error);
     return { success: false, pushed: 0, pulled: 0 };
+  }
+}
+
+export async function mergeGuestDataToCloud(token: string, userId: string) {
+  const snapshot = getGuestSnapshot();
+  const res = await fetch(`${API_BASE_URL}/api/sync/merge-guest`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(snapshot),
+  });
+
+  if (res.ok) {
+    transferGuestDataToUser(userId);
   }
 }

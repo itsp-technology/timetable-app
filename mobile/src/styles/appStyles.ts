@@ -85,9 +85,16 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
     headerSubRow: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
+      width: '100%',
       flexWrap: 'wrap',
       gap: 8,
-      width: '100%',
+    },
+    headerSubLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flex: 1,
     },
     examTag: {
       backgroundColor: theme.primary,
@@ -108,6 +115,56 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       fontSize: 11,
       fontWeight: '600',
     },
+    userAuthBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      backgroundColor: theme.surfaceElevated,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    userAuthBadgeText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.primary,
+    },
+
+    // --- Merge Local Banner ---
+    mergeBanner: {
+      backgroundColor: 'rgba(59, 130, 246, 0.12)',
+      borderWidth: 1,
+      borderColor: theme.primary,
+      marginHorizontal: 12,
+      marginTop: 8,
+      padding: 10,
+      borderRadius: 10,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    mergeBannerTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.textPrimary,
+    },
+    mergeBannerSub: {
+      fontSize: 10,
+      color: theme.textSecondary,
+      marginTop: 2,
+    },
+    mergeActionBtn: {
+      backgroundColor: theme.primary,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 6,
+    },
+    mergeActionBtnText: {
+      color: theme.primaryText,
+      fontSize: 11,
+      fontWeight: '800',
+    },
+
+    // --- Metrics Card ---
     metricsContainer: {
       backgroundColor: theme.metricsBg,
       marginHorizontal: 12,
@@ -146,6 +203,8 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       fontWeight: '600',
       marginTop: 2,
     },
+
+    // --- Categories Tracker ---
     categoryTrackerSection: {
       marginHorizontal: 12,
       marginTop: 12,
@@ -221,6 +280,8 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       fontWeight: '800',
       color: '#EF4444',
     },
+
+    // --- Day Selector ---
     daySelectorWrapper: {
       backgroundColor: theme.surface,
       marginTop: 8,
@@ -262,6 +323,8 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
     dayTabFullActive: {
       color: theme.tabActiveText,
     },
+
+    // --- Timetable Slots Stream ---
     streamContent: {
       padding: 12,
       paddingBottom: 95,
@@ -768,7 +831,34 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       color: theme.textPrimary,
     },
 
-    // --- Custom Notification Center Styles ---
+    // --- Authentication Modal Styles ---
+    authTabRow: {
+      flexDirection: 'row',
+      borderRadius: 8,
+      backgroundColor: theme.surfaceElevated,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginBottom: 12,
+      overflow: 'hidden',
+    },
+    authTab: {
+      flex: 1,
+      paddingVertical: 8,
+      alignItems: 'center',
+    },
+    authTabActive: {
+      backgroundColor: theme.primary,
+    },
+    authTabText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.textSecondary,
+    },
+    authTabTextActive: {
+      color: theme.primaryText,
+    },
+
+    // --- Notifications Center ---
     notifToggleCard: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -881,7 +971,7 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       color: theme.primary,
     },
 
-    // --- Custom In-App Modal Dialog ---
+    // --- Custom Modal Dialog ---
     customDialogOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.75)',

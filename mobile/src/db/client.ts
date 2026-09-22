@@ -1,6 +1,8 @@
 // mobile/src/db/client.ts
 import { Platform } from 'react-native';
 
+export const GUEST_USER_ID = 'local_guest';
+
 export interface CategoryItem {
   id: string;
   name: string;
@@ -8,6 +10,12 @@ export interface CategoryItem {
   color_hex: string;
   bg_hex: string;
   is_custom?: number;
+}
+
+export interface GuestSnapshot {
+  slots: any[];
+  subjects: any[];
+  attendance: any[];
 }
 
 export interface DatabaseDriver {
@@ -25,7 +33,8 @@ const DEFAULT_CATEGORIES: CategoryItem[] = [
   { id: 'mock', name: 'Speed Test', icon: '⏱️', color_hex: '#D97706', bg_hex: '#FFF7ED', is_custom: 0 },
 ];
 
-interface WebDBState {
+export interface WebDBState {
+  users: any[];
   subjects: any[];
   slots: any[];
   attendance: any[];
@@ -34,17 +43,33 @@ interface WebDBState {
   meta: Record<string, string>;
 }
 
-const STORAGE_KEY = 'exam_timetable_clean_v4';
+const STORAGE_KEY = 'exam_timetable_v6_stable';
 
 function loadWebState(): WebDBState {
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed to load local storage state:', e);
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.slots)) {
+          return {
+            users: parsed.users || [],
+            subjects: parsed.subjects || [],
+            slots: parsed.slots || [],
+            attendance: parsed.attendance || [],
+            categories: parsed.categories && parsed.categories.length > 0 ? parsed.categories : [...DEFAULT_CATEGORIES],
+            queue: parsed.queue || [],
+            meta: parsed.meta || {},
+          };
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load local storage state:', e);
+    }
   }
 
   return {
+    users: [],
     subjects: [],
     slots: [],
     attendance: [],
@@ -56,7 +81,11 @@ function loadWebState(): WebDBState {
 
 let webData: WebDBState = loadWebState();
 
-function persistWebState() {
+export function getRawWebState(): WebDBState {
+  return webData;
+}
+
+export function persistWebState() {
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(webData));
@@ -64,6 +93,65 @@ function persistWebState() {
       console.error('Failed to persist web data:', e);
     }
   }
+}
+
+export function getGuestSnapshot(): GuestSnapshot {
+  if (Platform.OS === 'web') {
+    const raw = getRawWebState();
+    return {
+      slots: raw.slots.filter((s) => s.user_id === GUEST_USER_ID && !s.is_deleted),
+      subjects: raw.subjects.filter((sub) => sub.user_id === GUEST_USER_ID && !sub.is_deleted),
+      attendance: raw.attendance.filter((a) => a.user_id === GUEST_USER_ID && !a.is_deleted),
+    };
+  } else {
+    const slots = db.getAllSync(
+      'SELECT * FROM timetable_slots WHERE user_id = ? AND is_deleted = 0;',
+      [GUEST_USER_ID]
+    );
+    const subjects = db.getAllSync(
+      'SELECT * FROM subjects WHERE user_id = ? AND is_deleted = 0;',
+      [GUEST_USER_ID]
+    );
+    const attendance = db.getAllSync(
+      'SELECT * FROM attendance_records WHERE user_id = ? AND is_deleted = 0;',
+      [GUEST_USER_ID]
+    );
+    return { slots, subjects, attendance };
+  }
+}
+
+export function transferGuestDataToUser(targetUserId: string): { slotsCount: number } {
+  let moved = 0;
+  if (Platform.OS === 'web') {
+    webData.slots.forEach((s) => {
+      if (s.user_id === GUEST_USER_ID) {
+        s.user_id = targetUserId;
+        s.updated_at = Date.now();
+        moved++;
+      }
+    });
+
+    webData.subjects.forEach((sub) => {
+      if (sub.user_id === GUEST_USER_ID) {
+        sub.user_id = targetUserId;
+        sub.updated_at = Date.now();
+      }
+    });
+
+    persistWebState();
+  } else {
+    const now = Date.now();
+    const guestRows = db.getAllSync('SELECT id FROM timetable_slots WHERE user_id = ? AND is_deleted = 0;', [GUEST_USER_ID]);
+    moved = guestRows.length;
+
+    db.withTransactionSync(() => {
+      db.runSync('UPDATE timetable_slots SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
+      db.runSync('UPDATE subjects SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
+      db.runSync('UPDATE attendance_records SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
+    });
+  }
+
+  return { slotsCount: moved };
 }
 
 const webDbDriver: DatabaseDriver = {
@@ -105,6 +193,21 @@ const webDbDriver: DatabaseDriver = {
   },
 
   getFirstSync<T = any>(query: string, params: any[] = []): T | null {
+    // Check local user existence (Username or Email)
+    if (query.includes('FROM users')) {
+      const p1 = (params[0] || '').toLowerCase().trim();
+      const p2 = (params[1] || params[0] || '').toLowerCase().trim();
+
+      const found = webData.users.find(
+        (u) =>
+          u.username?.toLowerCase() === p1 ||
+          u.username?.toLowerCase() === p2 ||
+          u.email?.toLowerCase() === p1 ||
+          u.email?.toLowerCase() === p2
+      );
+      return (found ? { ...found } : null) as unknown as T;
+    }
+
     if (query.includes('MAX(start_time_minutes')) {
       const userId = params[0];
       const dayOfWeek = Number(params[1]);
@@ -129,15 +232,25 @@ const webDbDriver: DatabaseDriver = {
   },
 
   runSync(query: string, params: any[] = []): void {
-    if (query.includes('INSERT INTO session_categories')) {
+    if (query.includes('INSERT INTO users')) {
+      const [id, username, email, name, created_at] = params;
+      const cleanUser = {
+        id,
+        username: username.toLowerCase().trim(),
+        email: email.toLowerCase().trim(),
+        name: name || username,
+        created_at: created_at || Date.now(),
+      };
+      const idx = webData.users.findIndex((u) => u.username === cleanUser.username || u.email === cleanUser.email);
+      if (idx >= 0) webData.users[idx] = cleanUser;
+      else webData.users.push(cleanUser);
+    } else if (query.includes('INSERT INTO session_categories')) {
       const [id, name, icon, color_hex, bg_hex, is_custom] = params;
       webData.categories.push({ id, name, icon, color_hex, bg_hex, is_custom: is_custom ?? 1 });
     } else if (query.includes('DELETE FROM session_categories')) {
       const [catId] = params;
       const idx = webData.categories.findIndex((c) => c.id === catId);
-      if (idx >= 0) {
-        webData.categories.splice(idx, 1);
-      }
+      if (idx >= 0) webData.categories.splice(idx, 1);
     } else if (query.includes('INSERT INTO subjects')) {
       const [id, user_id, name, room_number, created_at, updated_at] = params;
       const idx = webData.subjects.findIndex((s) => s.id === id);
@@ -175,6 +288,10 @@ const webDbDriver: DatabaseDriver = {
     } else if (query.includes('INSERT INTO sync_meta')) {
       const [key, value] = params;
       webData.meta[key] = value;
+    } else if (query.includes('DELETE FROM sync_meta')) {
+      // FIX 1: Explicitly handle DELETE FROM sync_meta so session key is destroyed on logout!
+      const [key] = params;
+      delete webData.meta[key];
     }
     persistWebState();
   },
@@ -201,7 +318,7 @@ if (Platform.OS === 'web') {
   activeDriver = webDbDriver;
 } else {
   const SQLite = require('expo-sqlite');
-  activeDriver = SQLite.openDatabaseSync('clean_exam_timetable_v4.db');
+  activeDriver = SQLite.openDatabaseSync('clean_exam_timetable_v6.db');
 }
 
 export const db: DatabaseDriver = activeDriver;
@@ -210,6 +327,13 @@ export function initLocalDatabase() {
   if (Platform.OS !== 'web') {
     db.execSync(`
       PRAGMA foreign_keys = ON;
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS session_categories (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -264,16 +388,6 @@ export function initLocalDatabase() {
         value TEXT
       );
     `);
-
-    const existing = db.getAllSync('SELECT id FROM session_categories LIMIT 1');
-    if (existing.length === 0) {
-      DEFAULT_CATEGORIES.forEach((c) => {
-        db.runSync(
-          'INSERT INTO session_categories (id, name, icon, color_hex, bg_hex, is_custom) VALUES (?, ?, ?, ?, ?, ?)',
-          [c.id, c.name, c.icon, c.color_hex, c.bg_hex, 0]
-        );
-      });
-    }
   }
 }
 
