@@ -51,9 +51,12 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
     },
     examTag: {
       backgroundColor: theme.primary,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
       borderRadius: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
     },
     examTagText: {
       color: theme.primaryText,
@@ -175,7 +178,12 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       padding: 40,
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: 40,
+      marginTop: 30,
+      backgroundColor: theme.surface,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: theme.border,
     },
     emptyIcon: {
       fontSize: 48,
@@ -191,7 +199,8 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       fontSize: 13,
       color: theme.textSecondary,
       textAlign: 'center',
-      maxWidth: 280,
+      maxWidth: 300,
+      lineHeight: 18,
     },
     slotCard: {
       backgroundColor: theme.surface,
@@ -232,10 +241,23 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       fontSize: 11,
       fontWeight: '700',
     },
+    timeSpanGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
     timeSpanText: {
       fontSize: 12,
       fontWeight: '600',
       color: theme.textSecondary,
+    },
+    deleteSlotBtn: {
+      padding: 4,
+    },
+    deleteSlotText: {
+      color: '#EF4444',
+      fontSize: 14,
+      fontWeight: '700',
     },
     subjectText: {
       fontSize: 17,
