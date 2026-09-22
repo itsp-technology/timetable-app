@@ -1,3 +1,4 @@
+// mobile/src/db/client.ts
 import { Platform } from 'react-native';
 
 export interface DatabaseDriver {
@@ -8,9 +9,6 @@ export interface DatabaseDriver {
   withTransactionSync(callback: () => void): void;
 }
 
-// -------------------------------------------------------------
-// Web Fallback Implementation (In-Memory + LocalStorage Persistence)
-// -------------------------------------------------------------
 interface WebDBState {
   subjects: any[];
   slots: any[];
@@ -19,27 +17,81 @@ interface WebDBState {
   meta: Record<string, string>;
 }
 
-const STORAGE_KEY = 'timetable_web_data_v1';
+const STORAGE_KEY = 'exam_timetable_v2';
 
 function loadWebState(): WebDBState {
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
     if (raw) return JSON.parse(raw);
   } catch (e) {
-    console.error('Failed to load web storage:', e);
+    console.error('Failed to load local web state:', e);
   }
 
-  // Initial demo data so browser immediately displays classes
+  // Pre-seeded with a comprehensive competitive exam timetable
   return {
     subjects: [
-      { id: 'sub_1', user_id: 'test_student_123', name: 'Computer Networks', room_number: 'Room 302', created_at: Date.now(), updated_at: Date.now(), is_deleted: 0 },
-      { id: 'sub_2', user_id: 'test_student_123', name: 'Database Systems', room_number: 'Lab 2', created_at: Date.now(), updated_at: Date.now(), is_deleted: 0 },
-      { id: 'sub_3', user_id: 'test_student_123', name: 'Operating Systems', room_number: 'LH-1', created_at: Date.now(), updated_at: Date.now(), is_deleted: 0 },
+      { id: 'sub_os', user_id: 'test_student_123', name: 'Operating Systems', room_number: 'Self Study / Table', created_at: Date.now(), updated_at: Date.now(), is_deleted: 0 },
+      { id: 'sub_dbms', user_id: 'test_student_123', name: 'Database Systems (DBMS)', room_number: 'Library Desk 4', created_at: Date.now(), updated_at: Date.now(), is_deleted: 0 },
+      { id: 'sub_cn', user_id: 'test_student_123', name: 'Computer Networks', room_number: 'Online Lecture', created_at: Date.now(), updated_at: Date.now(), is_deleted: 0 },
+      { id: 'sub_em', user_id: 'test_student_123', name: 'Engineering Mathematics', room_number: 'Study Room', created_at: Date.now(), updated_at: Date.now(), is_deleted: 0 },
     ],
     slots: [
-      { id: 'slot_1', user_id: 'test_student_123', subject_id: 'sub_1', day_of_week: 1, start_time_minutes: 540, end_time_minutes: 600, created_at: Date.now(), updated_at: Date.now(), is_deleted: 0 }, // Mon 09:00 - 10:00
-      { id: 'slot_2', user_id: 'test_student_123', subject_id: 'sub_2', day_of_week: 1, start_time_minutes: 615, end_time_minutes: 675, created_at: Date.now(), updated_at: Date.now(), is_deleted: 0 }, // Mon 10:15 - 11:15
-      { id: 'slot_3', user_id: 'test_student_123', subject_id: 'sub_3', day_of_week: 2, start_time_minutes: 660, end_time_minutes: 720, created_at: Date.now(), updated_at: Date.now(), is_deleted: 0 }, // Tue 11:00 - 12:00
+      {
+        id: 'slot_1',
+        user_id: 'test_student_123',
+        subject_id: 'sub_os',
+        day_of_week: 1, // Monday
+        start_time_minutes: 390, // 06:30
+        end_time_minutes: 510,   // 08:30 (2.0 hrs)
+        slot_type: 'theory',
+        topic: 'Process Synchronization & Semaphores',
+        target_questions: 0,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        is_deleted: 0
+      },
+      {
+        id: 'slot_2',
+        user_id: 'test_student_123',
+        subject_id: 'sub_dbms',
+        day_of_week: 1,
+        start_time_minutes: 570, // 09:30
+        end_time_minutes: 720,   // 12:00 (2.5 hrs)
+        slot_type: 'pyq',
+        topic: 'Normalization (3NF/BCNF) + 2015-2024 PYQs',
+        target_questions: 35,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        is_deleted: 0
+      },
+      {
+        id: 'slot_3',
+        user_id: 'test_student_123',
+        subject_id: 'sub_cn',
+        day_of_week: 1,
+        start_time_minutes: 840, // 14:00
+        end_time_minutes: 960,   // 16:00 (2.0 hrs)
+        slot_type: 'mock',
+        topic: 'IPv4 Subnetting & TCP Window Speed Drill',
+        target_questions: 25,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        is_deleted: 0
+      },
+      {
+        id: 'slot_4',
+        user_id: 'test_student_123',
+        subject_id: 'sub_em',
+        day_of_week: 1,
+        start_time_minutes: 1020, // 17:00
+        end_time_minutes: 1110,   // 18:30 (1.5 hrs)
+        slot_type: 'revision',
+        topic: 'Eigenvalues & Linear Algebra Formula Sheet',
+        target_questions: 15,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        is_deleted: 0
+      },
     ],
     attendance: [],
     queue: [],
@@ -54,14 +106,13 @@ function persistWebState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(webData));
     } catch (e) {
-      console.error('Failed to save to localStorage:', e);
+      console.error('Failed to save state:', e);
     }
   }
 }
 
 const webDbDriver: DatabaseDriver = {
   getAllSync<T = any>(query: string, params: any[] = []): T[] {
-    // 1. Timetable Slot Query
     if (query.includes('FROM timetable_slots')) {
       const date = params[0];
       const userId = params[1];
@@ -76,25 +127,25 @@ const webDbDriver: DatabaseDriver = {
         const att = webData.attendance.find((a) => a.slot_id === slot.id && a.date === date && !a.is_deleted);
         return {
           slot_id: slot.id,
-          subject_name: sub ? sub.name : 'Unknown Subject',
-          room_number: sub ? sub.room_number : 'TBD',
+          subject_name: sub ? sub.name : 'General Prep',
+          room_number: sub ? sub.room_number : 'Desk',
           start_time_minutes: slot.start_time_minutes,
           end_time_minutes: slot.end_time_minutes,
+          slot_type: slot.slot_type || 'theory',
+          topic: slot.topic || 'General Practice',
+          target_questions: slot.target_questions || 0,
           status: att ? att.status : null,
         } as unknown as T;
       });
     }
 
-    // 2. Sync Queue Query
     if (query.includes('FROM sync_queue')) {
       return [...webData.queue] as unknown as T[];
     }
-
     return [];
   },
 
   getFirstSync<T = any>(query: string, params: any[] = []): T | null {
-    // Collision check
     if (query.includes('MAX(start_time_minutes')) {
       const userId = params[0];
       const dayOfWeek = Number(params[1]);
@@ -108,16 +159,13 @@ const webDbDriver: DatabaseDriver = {
           !s.is_deleted &&
           Math.max(s.start_time_minutes, startM) < Math.min(s.end_time_minutes, endM)
       );
-
       return (collision ? { id: collision.id } : null) as unknown as T;
     }
 
-    // Sync Meta Query
     if (query.includes('FROM sync_meta')) {
       const key = params[0];
       return (webData.meta[key] ? { value: webData.meta[key] } : null) as unknown as T;
     }
-
     return null;
   },
 
@@ -129,9 +177,9 @@ const webDbDriver: DatabaseDriver = {
       if (idx >= 0) webData.subjects[idx] = row;
       else webData.subjects.push(row);
     } else if (query.includes('INSERT INTO timetable_slots')) {
-      const [id, user_id, subject_id, day_of_week, start_time_minutes, end_time_minutes, created_at, updated_at] = params;
+      const [id, user_id, subject_id, day_of_week, start_time_minutes, end_time_minutes, slot_type, topic, target_questions, created_at, updated_at] = params;
       const idx = webData.slots.findIndex((s) => s.id === id);
-      const row = { id, user_id, subject_id, day_of_week, start_time_minutes, end_time_minutes, created_at, updated_at, is_deleted: 0 };
+      const row = { id, user_id, subject_id, day_of_week, start_time_minutes, end_time_minutes, slot_type, topic, target_questions, created_at, updated_at, is_deleted: 0 };
       if (idx >= 0) webData.slots[idx] = row;
       else webData.slots.push(row);
     } else if (query.includes('INSERT INTO attendance_records')) {
@@ -176,16 +224,12 @@ const webDbDriver: DatabaseDriver = {
   },
 };
 
-// -------------------------------------------------------------
-// Native Platform Loader
-// -------------------------------------------------------------
 let activeDriver: DatabaseDriver;
-
 if (Platform.OS === 'web') {
   activeDriver = webDbDriver;
 } else {
   const SQLite = require('expo-sqlite');
-  activeDriver = SQLite.openDatabaseSync('timetable_local.db');
+  activeDriver = SQLite.openDatabaseSync('exam_timetable.db');
 }
 
 export const db: DatabaseDriver = activeDriver;
@@ -198,10 +242,7 @@ export function initLocalDatabase() {
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
         name TEXT NOT NULL,
-        course_code TEXT,
         room_number TEXT,
-        color_hex TEXT DEFAULT '#3B82F6',
-        minimum_attendance_pct INTEGER DEFAULT 75,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         is_deleted INTEGER DEFAULT 0
@@ -213,8 +254,9 @@ export function initLocalDatabase() {
         day_of_week INTEGER NOT NULL,
         start_time_minutes INTEGER NOT NULL,
         end_time_minutes INTEGER NOT NULL,
-        slot_type TEXT DEFAULT 'lecture',
-        week_cycle TEXT DEFAULT 'all',
+        slot_type TEXT DEFAULT 'theory',
+        topic TEXT DEFAULT '',
+        target_questions INTEGER DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         is_deleted INTEGER DEFAULT 0
