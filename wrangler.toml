@@ -1,0 +1,13 @@
+name = "timetable-app"
+main = "api/src/index.ts"
+compatibility_date = "2024-09-23"
+
+# Serves the compiled Expo web frontend automatically
+[assets]
+directory = "mobile/dist"
+
+# Connects your D1 Database to the API
+[[d1_databases]]
+binding = "DB"
+database_name = "student_timetable_db"
+database_id = "23ad31e7-5d93-4e61-b578-ad79c927be97"
