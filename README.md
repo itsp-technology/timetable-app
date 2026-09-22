@@ -66,7 +66,7 @@ npx wrangler d1 migrations apply student_timetable_db --local
 
 ### Option 2: Provide the Correct Relative Path to `--file`
 
-If executing directly via the `--file` flag, update the path to point into the `migrations` folder:
+If executing directly via the `--file` flag, updat the path to point into the `migrations` folder:
 
 ```bash
 npx wrangler d1 execute student_timetable_db --local --file=./migrations/0001_init.sql
