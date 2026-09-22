@@ -1,6 +1,15 @@
 // mobile/src/db/client.ts
 import { Platform } from 'react-native';
 
+export interface CategoryItem {
+  id: string;
+  name: string;
+  icon: string;
+  color_hex: string;
+  bg_hex: string;
+  is_custom?: number;
+}
+
 export interface DatabaseDriver {
   getAllSync<T = any>(query: string, params?: any[]): T[];
   getFirstSync<T = any>(query: string, params?: any[]): T | null;
@@ -9,15 +18,23 @@ export interface DatabaseDriver {
   withTransactionSync(callback: () => void): void;
 }
 
+const DEFAULT_CATEGORIES: CategoryItem[] = [
+  { id: 'theory', name: 'Core Theory', icon: '📖', color_hex: '#2563EB', bg_hex: '#EFF6FF', is_custom: 0 },
+  { id: 'pyq', name: 'PYQ Drill', icon: '📝', color_hex: '#059669', bg_hex: '#ECFDF5', is_custom: 0 },
+  { id: 'revision', name: 'Active Recall', icon: '⚡', color_hex: '#9333EA', bg_hex: '#FDF4FF', is_custom: 0 },
+  { id: 'mock', name: 'Speed Test', icon: '⏱️', color_hex: '#D97706', bg_hex: '#FFF7ED', is_custom: 0 },
+];
+
 interface WebDBState {
   subjects: any[];
   slots: any[];
   attendance: any[];
+  categories: CategoryItem[];
   queue: any[];
   meta: Record<string, string>;
 }
 
-const STORAGE_KEY = 'exam_timetable_user_clean_v1';
+const STORAGE_KEY = 'exam_timetable_clean_v4';
 
 function loadWebState(): WebDBState {
   try {
@@ -27,11 +44,11 @@ function loadWebState(): WebDBState {
     console.error('Failed to load local storage state:', e);
   }
 
-  // 100% Clean initial state - Zero hardcoded subjects or slots
   return {
     subjects: [],
     slots: [],
     attendance: [],
+    categories: [...DEFAULT_CATEGORIES],
     queue: [],
     meta: {},
   };
@@ -44,13 +61,17 @@ function persistWebState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(webData));
     } catch (e) {
-      console.error('Failed to save state:', e);
+      console.error('Failed to persist web data:', e);
     }
   }
 }
 
 const webDbDriver: DatabaseDriver = {
   getAllSync<T = any>(query: string, params: any[] = []): T[] {
+    if (query.includes('FROM session_categories')) {
+      return [...webData.categories] as unknown as T[];
+    }
+
     if (query.includes('FROM timetable_slots')) {
       const date = params[0];
       const userId = params[1];
@@ -108,7 +129,16 @@ const webDbDriver: DatabaseDriver = {
   },
 
   runSync(query: string, params: any[] = []): void {
-    if (query.includes('INSERT INTO subjects')) {
+    if (query.includes('INSERT INTO session_categories')) {
+      const [id, name, icon, color_hex, bg_hex, is_custom] = params;
+      webData.categories.push({ id, name, icon, color_hex, bg_hex, is_custom: is_custom ?? 1 });
+    } else if (query.includes('DELETE FROM session_categories')) {
+      const [catId] = params;
+      const idx = webData.categories.findIndex((c) => c.id === catId);
+      if (idx >= 0) {
+        webData.categories.splice(idx, 1);
+      }
+    } else if (query.includes('INSERT INTO subjects')) {
       const [id, user_id, name, room_number, created_at, updated_at] = params;
       const idx = webData.subjects.findIndex((s) => s.id === id);
       const row = { id, user_id, name, room_number, created_at, updated_at, is_deleted: 0 };
@@ -123,9 +153,7 @@ const webDbDriver: DatabaseDriver = {
     } else if (query.includes('DELETE FROM timetable_slots')) {
       const [slotId] = params;
       const idx = webData.slots.findIndex((s) => s.id === slotId);
-      if (idx >= 0) {
-        webData.slots.splice(idx, 1);
-      }
+      if (idx >= 0) webData.slots.splice(idx, 1);
     } else if (query.includes('INSERT INTO attendance_records')) {
       const [id, user_id, slot_id, date, status, created_at, updated_at] = params;
       const idx = webData.attendance.findIndex((a) => a.slot_id === slot_id && a.date === date);
@@ -173,7 +201,7 @@ if (Platform.OS === 'web') {
   activeDriver = webDbDriver;
 } else {
   const SQLite = require('expo-sqlite');
-  activeDriver = SQLite.openDatabaseSync('clean_exam_timetable.db');
+  activeDriver = SQLite.openDatabaseSync('clean_exam_timetable_v4.db');
 }
 
 export const db: DatabaseDriver = activeDriver;
@@ -182,6 +210,14 @@ export function initLocalDatabase() {
   if (Platform.OS !== 'web') {
     db.execSync(`
       PRAGMA foreign_keys = ON;
+      CREATE TABLE IF NOT EXISTS session_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        icon TEXT NOT NULL,
+        color_hex TEXT NOT NULL,
+        bg_hex TEXT NOT NULL,
+        is_custom INTEGER DEFAULT 1
+      );
       CREATE TABLE IF NOT EXISTS subjects (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -228,6 +264,16 @@ export function initLocalDatabase() {
         value TEXT
       );
     `);
+
+    const existing = db.getAllSync('SELECT id FROM session_categories LIMIT 1');
+    if (existing.length === 0) {
+      DEFAULT_CATEGORIES.forEach((c) => {
+        db.runSync(
+          'INSERT INTO session_categories (id, name, icon, color_hex, bg_hex, is_custom) VALUES (?, ?, ?, ?, ?, ?)',
+          [c.id, c.name, c.icon, c.color_hex, c.bg_hex, 0]
+        );
+      });
+    }
   }
 }
 
