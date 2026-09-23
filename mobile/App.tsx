@@ -14,7 +14,14 @@ import {
   useWindowDimensions,
   ScrollView,
 } from 'react-native';
-import { db, initLocalDatabase, queueMutation, CategoryItem, GUEST_USER_ID } from './src/db/client';
+import {
+  db,
+  initLocalDatabase,
+  queueMutation,
+  CategoryItem,
+  GUEST_USER_ID,
+  RevisionMilestone,
+} from './src/db/client';
 import { THEMES, ThemeKey } from './src/theme/themes';
 import { getAppStyles } from './src/styles/appStyles';
 import { authService, AuthUser } from './src/services/authService';
@@ -28,6 +35,8 @@ import {
 } from './src/services/notificationService';
 
 type Period = 'AM' | 'PM';
+type ViewLayoutMode = 'extra_large' | 'large' | 'medium' | 'small' | 'list' | 'details' | 'tiles' | 'content';
+type SortOrderMode = 'time' | 'duration' | 'subject' | 'target' | 'status';
 
 interface ExamSlotItem {
   slot_id: string;
@@ -38,6 +47,7 @@ interface ExamSlotItem {
   slot_type: string;
   topic: string;
   target_questions: number;
+  specific_date?: string | null;
   status: 'completed' | 'skipped' | null;
 }
 
@@ -60,6 +70,11 @@ const DAYS = [
   { short: 'Fri', full: 'Friday' },
   { short: 'Sat', full: 'Saturday' },
   { short: 'Sun', full: 'Sunday' },
+];
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
 const LEAD_TIME_OPTIONS = [0, 5, 10, 15];
@@ -86,6 +101,20 @@ function formatMinutesTo12Hour(totalMinutes: number): string {
   const period: Period = hours >= 12 ? 'PM' : 'AM';
   hours = hours % 12 || 12;
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${period}`;
+}
+
+function formatDateToIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysToIso(isoStr: string, days: number): string {
+  const [y, m, d] = isoStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + days);
+  return formatDateToIso(date);
 }
 
 export default function App() {
@@ -118,10 +147,86 @@ export default function App() {
   const activeTheme = THEMES[currentThemeKey];
   const styles = useMemo(() => getAppStyles(activeTheme, isDesktop), [activeTheme, isDesktop]);
 
-  const [selectedDay, setSelectedDay] = useState<number>(1);
+  // 📅 Calendar & Date States
+  const todayIso = useMemo(() => formatDateToIso(new Date()), []);
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso);
+  const [calendarViewMode, setCalendarViewMode] = useState<'month' | 'week'>('month');
+
+  const selectedDateObj = useMemo(() => {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }, [selectedDate]);
+
+  const [viewYear, setViewYear] = useState<number>(selectedDateObj.getFullYear());
+  const [viewMonth, setViewMonth] = useState<number>(selectedDateObj.getMonth());
+
+  const selectedDay = useMemo(() => {
+    const d = selectedDateObj.getDay();
+    return d === 0 ? 7 : d;
+  }, [selectedDateObj]);
+
+  // 🗂️ EXPLORER "SORT ⌵" & "VIEW ⌵" VIEW STATES
+  const [currentViewLayout, setCurrentViewLayout] = useState<ViewLayoutMode>('large');
+  const [currentSortOrder, setCurrentSortOrder] = useState<SortOrderMode>('time');
+  const [showDetailsPane, setShowDetailsPane] = useState<boolean>(true);
+  const [showPreviewPane, setShowPreviewPane] = useState<boolean>(true);
+
+  // Explorer Dropdown Popover Menus
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState<boolean>(false);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState<boolean>(false);
+
+  // 7-day strip
+  const weekStripDays = useMemo(() => {
+    const list = [];
+    const base = new Date(selectedDateObj);
+    base.setDate(base.getDate() - 3);
+
+    for (let i = 0; i < 7; i++) {
+      const cur = new Date(base);
+      cur.setDate(base.getDate() + i);
+      const iso = formatDateToIso(cur);
+      const dayIdx = cur.getDay() === 0 ? 6 : cur.getDay() - 1;
+      list.push({
+        iso,
+        dayNum: cur.getDate(),
+        dayShort: DAYS[dayIdx].short,
+        isToday: iso === todayIso,
+        isSelected: iso === selectedDate,
+      });
+    }
+    return list;
+  }, [selectedDate, todayIso, selectedDateObj]);
+
+  // Month grid
+  const monthGridData = useMemo(() => {
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const firstDayIndex = (new Date(viewYear, viewMonth, 1).getDay() + 6) % 7;
+
+    const cells = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      cells.push({ key: `pad_${i}`, dayNum: 0, iso: '' });
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      cells.push({
+        key: iso,
+        dayNum: d,
+        iso,
+        isToday: iso === todayIso,
+        isSelected: iso === selectedDate,
+      });
+    }
+    return cells;
+  }, [viewYear, viewMonth, todayIso, selectedDate]);
+
   const [slots, setSlots] = useState<ExamSlotItem[]>([]);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+
+  // Spaced Repetition States
+  const [revisionsDue, setRevisionsDue] = useState<RevisionMilestone[]>([]);
+  const [recallPromptSlot, setRecallPromptSlot] = useState<ExamSlotItem | null>(null);
+  const [isRecallModalOpen, setIsRecallModalOpen] = useState<boolean>(false);
 
   // Categories & Filtering
   const [categories, setCategories] = useState<CategoryItem[]>([]);
@@ -136,11 +241,12 @@ export default function App() {
   const [newCatEmoji, setNewCatEmoji] = useState<string>('🎯');
   const [newCatColor, setNewCatColor] = useState<string>('#2563EB');
 
-  // Slot Form Inputs
+  // Slot Form Inputs & Frequency
   const [subjectName, setSubjectName] = useState<string>('');
   const [topicName, setTopicName] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('theory');
   const [targetQuestions, setTargetQuestions] = useState<string>('');
+  const [slotFrequency, setSlotFrequency] = useState<'specific_date' | 'weekly'>('specific_date');
 
   // Watch Selector States
   const [startHour, setStartHour] = useState<number>(9);
@@ -151,9 +257,7 @@ export default function App() {
   const [endMinute, setEndMinute] = useState<number>(0);
   const [endPeriod, setEndPeriod] = useState<Period>('AM');
 
-  const todayIso = new Date().toISOString().split('T')[0];
-
-  // In-App Custom Dialog
+  // Dialog State
   const [dialog, setDialog] = useState<CustomDialogState>({
     visible: false,
     title: '',
@@ -272,19 +376,31 @@ export default function App() {
     if (storedExamDate?.value) setExamDate(storedExamDate.value);
 
     refreshCategories();
-    refreshSlots();
   }, []);
 
-  // Reload timetable when active user or day changes
+  // Reload timetable and revisions whenever active user or selected date changes
   useEffect(() => {
     refreshSlots();
-  }, [selectedDay, activeUserId]);
+    refreshRevisions();
+  }, [selectedDate, activeUserId]);
 
   const refreshCategories = () => {
     const rows = db.getAllSync<CategoryItem>('SELECT * FROM session_categories');
     setCategories(rows);
     if (rows.length > 0 && !selectedCategory) {
       setSelectedCategory(rows[0].id);
+    }
+  };
+
+  const refreshRevisions = () => {
+    try {
+      const rows = db.getAllSync<RevisionMilestone>(
+        `SELECT * FROM revision_milestones WHERE user_id = ? AND due_date = ? AND is_deleted = 0 ORDER BY interval_stage ASC;`,
+        [activeUserId, selectedDate]
+      );
+      setRevisionsDue(rows);
+    } catch {
+      setRevisionsDue([]);
     }
   };
 
@@ -300,13 +416,16 @@ export default function App() {
           t.slot_type,
           t.topic,
           t.target_questions,
+          t.specific_date,
           a.status
         FROM timetable_slots t
         JOIN subjects s ON t.subject_id = s.id
         LEFT JOIN attendance_records a ON a.slot_id = t.id AND a.date = ? AND a.is_deleted = 0
-        WHERE t.user_id = ? AND t.day_of_week = ? AND t.is_deleted = 0
+        WHERE t.user_id = ? 
+          AND (t.specific_date = ? OR (t.specific_date IS NULL AND t.day_of_week = ?))
+          AND t.is_deleted = 0
         ORDER BY t.start_time_minutes ASC;`,
-        [todayIso, activeUserId, selectedDay]
+        [selectedDate, activeUserId, selectedDate, selectedDay]
       );
       setSlots(rows);
     } catch (e) {
@@ -322,10 +441,39 @@ export default function App() {
     return map;
   }, [slots]);
 
-  const visibleSlots = useMemo(() => {
-    if (activeFilterCategory === 'ALL') return slots;
-    return slots.filter((s) => s.slot_type === activeFilterCategory);
-  }, [slots, activeFilterCategory]);
+  // Filter and Sort sessions according to current user selections
+  const sortedAndFilteredSlots = useMemo(() => {
+    let result = activeFilterCategory === 'ALL'
+      ? [...slots]
+      : slots.filter((s) => s.slot_type === activeFilterCategory);
+
+    // Apply sorting
+    result.sort((a, b) => {
+      if (currentSortOrder === 'time') {
+        return a.start_time_minutes - b.start_time_minutes;
+      }
+      if (currentSortOrder === 'duration') {
+        const durA = a.end_time_minutes - a.start_time_minutes;
+        const durB = b.end_time_minutes - b.start_time_minutes;
+        return durB - durA;
+      }
+      if (currentSortOrder === 'subject') {
+        return a.subject_name.localeCompare(b.subject_name);
+      }
+      if (currentSortOrder === 'target') {
+        return (b.target_questions || 0) - (a.target_questions || 0);
+      }
+      if (currentSortOrder === 'status') {
+        const order = { null: 0, completed: 1, skipped: 2 };
+        const statusA = order[a.status as keyof typeof order] ?? 0;
+        const statusB = order[b.status as keyof typeof order] ?? 0;
+        return statusA - statusB;
+      }
+      return 0;
+    });
+
+    return result;
+  }, [slots, activeFilterCategory, currentSortOrder]);
 
   const handleCreateCategory = (fromInline: boolean = false) => {
     if (!newCatName.trim()) {
@@ -443,6 +591,28 @@ export default function App() {
     return { plannedHours, completedHours, completionRate, questionsTargeted, questionsCompleted };
   }, [slots]);
 
+  const handleStepMonth = (delta: number) => {
+    let nextM = viewMonth + delta;
+    let nextY = viewYear;
+    if (nextM > 11) {
+      nextM = 0;
+      nextY += 1;
+    } else if (nextM < 0) {
+      nextM = 11;
+      nextY -= 1;
+    }
+    setViewMonth(nextM);
+    setViewYear(nextY);
+  };
+
+  const handleStepDay = (delta: number) => {
+    const nextDate = addDaysToIso(selectedDate, delta);
+    setSelectedDate(nextDate);
+    const [y, m] = nextDate.split('-').map(Number);
+    setViewYear(y);
+    setViewMonth(m - 1);
+  };
+
   const handleCreateSlot = () => {
     if (!subjectName.trim()) {
       showAppAlert('Required Field', 'Please provide a Subject name.');
@@ -456,9 +626,17 @@ export default function App() {
 
     const collision = db.getFirstSync(
       `SELECT id FROM timetable_slots
-       WHERE user_id = ? AND day_of_week = ? AND is_deleted = 0
-         AND MAX(start_time_minutes, ?) < MIN(end_time_minutes, ?);`,
-      [activeUserId, selectedDay, calculatedStartMinutes, calculatedEndMinutes]
+       WHERE user_id = ? 
+         AND (specific_date = ? OR (specific_date IS NULL AND day_of_week = ?))
+         AND is_deleted = 0
+         AND start_time_minutes < ? AND end_time_minutes > ?;`,
+      [
+        activeUserId,
+        slotFrequency === 'specific_date' ? selectedDate : '',
+        selectedDay,
+        calculatedEndMinutes,
+        calculatedStartMinutes,
+      ]
     );
 
     if (collision) {
@@ -470,6 +648,7 @@ export default function App() {
     const subjectId = 'sub_' + Math.random().toString(36).substring(2, 9);
     const slotId = 'slot_' + Math.random().toString(36).substring(2, 9);
     const qCount = parseInt(targetQuestions, 10) || 0;
+    const finalSpecificDate = slotFrequency === 'specific_date' ? selectedDate : null;
 
     db.withTransactionSync(() => {
       const subData = {
@@ -492,6 +671,7 @@ export default function App() {
         user_id: activeUserId,
         subject_id: subjectId,
         day_of_week: selectedDay,
+        specific_date: finalSpecificDate,
         start_time_minutes: calculatedStartMinutes,
         end_time_minutes: calculatedEndMinutes,
         slot_type: selectedCategory,
@@ -502,8 +682,22 @@ export default function App() {
         is_deleted: 0,
       };
       db.runSync(
-        `INSERT INTO timetable_slots (id, user_id, subject_id, day_of_week, start_time_minutes, end_time_minutes, slot_type, topic, target_questions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-        [slotData.id, slotData.user_id, slotData.subject_id, slotData.day_of_week, slotData.start_time_minutes, slotData.end_time_minutes, slotData.slot_type, slotData.topic, slotData.target_questions, slotData.created_at, slotData.updated_at]
+        `INSERT INTO timetable_slots (id, user_id, subject_id, day_of_week, specific_date, start_time_minutes, end_time_minutes, slot_type, topic, target_questions, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        [
+          slotData.id,
+          slotData.user_id,
+          slotData.subject_id,
+          slotData.day_of_week,
+          slotData.specific_date,
+          slotData.start_time_minutes,
+          slotData.end_time_minutes,
+          slotData.slot_type,
+          slotData.topic,
+          slotData.target_questions,
+          slotData.created_at,
+          slotData.updated_at,
+        ]
       );
       queueMutation('timetable_slots', slotId, slotData);
     });
@@ -537,7 +731,7 @@ export default function App() {
       id: attId,
       user_id: activeUserId,
       slot_id: slotId,
-      date: todayIso,
+      date: selectedDate,
       status,
       created_at: now,
       updated_at: now,
@@ -547,11 +741,103 @@ export default function App() {
     db.runSync(
       `INSERT INTO attendance_records (id, user_id, slot_id, date, status, created_at, updated_at, is_deleted)
        VALUES (?, ?, ?, ?, ?, ?, ?, 0);`,
-      [attId, activeUserId, slotId, todayIso, status, now, now]
+      [attId, activeUserId, slotId, selectedDate, status, now, now]
     );
 
     queueMutation('attendance_records', attId, attData);
     refreshSlots();
+
+    if (status === 'completed') {
+      const completedSlot = slots.find((s) => s.slot_id === slotId);
+      if (completedSlot) {
+        setRecallPromptSlot(completedSlot);
+        setIsRecallModalOpen(true);
+      }
+    }
+  };
+
+  const handleConfirmSpacedRepetition = () => {
+    if (!recallPromptSlot) return;
+
+    const topicTitle = recallPromptSlot.topic.trim() || recallPromptSlot.subject_name;
+    const intervals = [
+      { stage: 1, days: 2 },
+      { stage: 2, days: 7 },
+      { stage: 3, days: 21 },
+    ];
+    const now = Date.now();
+    const createdDates: string[] = [];
+
+    db.withTransactionSync(() => {
+      intervals.forEach(({ stage, days }) => {
+        const dueDate = addDaysToIso(selectedDate, days);
+        createdDates.push(dueDate);
+        const revId = 'rev_' + Math.random().toString(36).substring(2, 9);
+
+        const revData = {
+          id: revId,
+          user_id: activeUserId,
+          slot_id: recallPromptSlot.slot_id,
+          subject_name: recallPromptSlot.subject_name,
+          topic: topicTitle,
+          interval_stage: stage,
+          due_date: dueDate,
+          is_completed: 0,
+          created_at: now,
+          updated_at: now,
+          is_deleted: 0,
+        };
+
+        db.runSync(
+          `INSERT INTO revision_milestones (id, user_id, slot_id, subject_name, topic, interval_stage, due_date, is_completed, created_at, updated_at, is_deleted)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          [
+            revData.id,
+            revData.user_id,
+            revData.slot_id,
+            revData.subject_name,
+            revData.topic,
+            revData.interval_stage,
+            revData.due_date,
+            revData.is_completed,
+            revData.created_at,
+            revData.updated_at,
+            revData.is_deleted,
+          ]
+        );
+        queueMutation('revision_milestones', revId, revData);
+      });
+    });
+
+    setIsRecallModalOpen(false);
+    setRecallPromptSlot(null);
+    refreshRevisions();
+
+    dispatchNotification(
+      '🧠 Active Recall Scheduled',
+      `Checkpoints set for: ${createdDates.join(', ')}`
+    );
+
+    showAppAlert(
+      'Active Recall Scheduled',
+      `Checkpoints scheduled for:\n• Day +2: ${createdDates[0]}\n• Day +7: ${createdDates[1]}\n• Day +21: ${createdDates[2]}`
+    );
+  };
+
+  const handleToggleRevision = (rev: RevisionMilestone) => {
+    const nextVal = rev.is_completed === 1 ? 0 : 1;
+    const now = Date.now();
+
+    db.runSync(
+      `UPDATE revision_milestones SET is_completed = ?, updated_at = ? WHERE id = ?;`,
+      [nextVal, now, rev.id]
+    );
+    queueMutation('revision_milestones', rev.id, {
+      id: rev.id,
+      is_completed: nextVal,
+      updated_at: now,
+    });
+    refreshRevisions();
   };
 
   const handleCloudSync = async () => {
@@ -559,6 +845,7 @@ export default function App() {
     const result = await syncService.syncUserTimetable();
     setIsSyncing(false);
     refreshSlots();
+    refreshRevisions();
     showAppAlert(
       result.success ? 'Sync Completed' : 'Sync Status',
       result.success
@@ -567,10 +854,151 @@ export default function App() {
     );
   };
 
-  const guestSlotsCount = useMemo(() => {
-    if (currentUser) return syncService.getGuestSlotCount();
-    return 0;
-  }, [currentUser, slots]);
+  // Helper render for various view modes
+  const renderSlotItem = ({ item }: { item: ExamSlotItem }) => {
+    const cat = categories.find((c) => c.id === item.slot_type) || {
+      name: item.slot_type,
+      icon: '📌',
+      color_hex: activeTheme.primary,
+      bg_hex: activeTheme.surfaceElevated,
+    };
+    const durationHrs = ((item.end_time_minutes - item.start_time_minutes) / 60).toFixed(1);
+    const isCompleted = item.status === 'completed';
+    const isSkipped = item.status === 'skipped';
+
+    // 1. Compact / List View Mode
+    if (currentViewLayout === 'list' || currentViewLayout === 'small') {
+      return (
+        <View style={[styles.compactSlotRow, { borderLeftColor: cat.color_hex }, isCompleted && styles.slotCardCompleted]}>
+          <View style={styles.compactTimeCol}>
+            <Text style={styles.compactTimeText}>{formatMinutesTo12Hour(item.start_time_minutes)}</Text>
+            <Text style={{ fontSize: 9, color: activeTheme.textSecondary }}>{durationHrs}h</Text>
+          </View>
+
+          <View style={styles.compactSubjectCol}>
+            <Text style={styles.compactSubjectTitle} numberOfLines={1}>{item.subject_name}</Text>
+            {showPreviewPane && item.topic ? (
+              <Text style={styles.compactTopicText} numberOfLines={1}>{item.topic}</Text>
+            ) : null}
+          </View>
+
+          {showDetailsPane && item.target_questions > 0 && (
+            <View style={[styles.qTargetBadge, { marginHorizontal: 6 }]}>
+              <Text style={styles.qTargetText}>🎯 {item.target_questions} Qs</Text>
+            </View>
+          )}
+
+          <View style={styles.actionBtnGroup}>
+            <TouchableOpacity
+              style={[styles.statusBtn, isCompleted && styles.completedActiveBtn, { paddingHorizontal: 6, paddingVertical: 3 }]}
+              onPress={() => handleUpdateStatus(item.slot_id, 'completed')}
+            >
+              <Text style={[styles.statusBtnText, isCompleted && styles.statusBtnTextActive, { fontSize: 9 }]}>
+                {isCompleted ? '✓' : 'Done'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.deleteSlotBtn} onPress={() => handleDeleteSlot(item.slot_id)}>
+              <Text style={styles.deleteSlotText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    // 2. Tiles / Medium / Grid View Mode
+    if (currentViewLayout === 'tiles' || currentViewLayout === 'medium') {
+      return (
+        <View style={[styles.gridSlotCard, { borderTopColor: cat.color_hex }, isCompleted && styles.slotCardCompleted]}>
+          <View style={styles.gridHeaderRow}>
+            <Text style={[styles.typeBadgeText, { color: cat.color_hex }]}>{cat.icon} {cat.name}</Text>
+            <Text style={styles.gridTimeText}>{formatMinutesTo12Hour(item.start_time_minutes)} ({durationHrs}h)</Text>
+          </View>
+
+          <Text style={styles.gridSubjectText} numberOfLines={1}>{item.subject_name}</Text>
+          {showPreviewPane && item.topic ? (
+            <Text style={styles.topicText} numberOfLines={1}>📌 {item.topic}</Text>
+          ) : null}
+
+          <View style={[styles.cardFooterRow, { paddingTop: 6, marginTop: 4 }]}>
+            {showDetailsPane ? (
+              <Text style={styles.qTargetText}>🎯 {item.target_questions || 0} Qs</Text>
+            ) : <View />}
+
+            <View style={styles.actionBtnGroup}>
+              <TouchableOpacity
+                style={[styles.statusBtn, isCompleted && styles.completedActiveBtn]}
+                onPress={() => handleUpdateStatus(item.slot_id, 'completed')}
+              >
+                <Text style={[styles.statusBtnText, isCompleted && styles.statusBtnTextActive]}>
+                  {isCompleted ? '✓ Done' : 'Done'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteSlotBtn} onPress={() => handleDeleteSlot(item.slot_id)}>
+                <Text style={styles.deleteSlotText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    // 3. Large / Extra Large / Details Cards Mode (Default)
+    return (
+      <View style={[styles.slotCard, isCompleted && styles.slotCardCompleted]}>
+        <View style={[styles.slotTypeAccent, { backgroundColor: cat.color_hex }]} />
+
+        <View style={styles.slotBody}>
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.typeBadge, { backgroundColor: cat.bg_hex }]}>
+              <Text style={[styles.typeBadgeText, { color: cat.color_hex }]}>
+                {cat.icon} {cat.name}
+              </Text>
+            </View>
+            <View style={styles.timeSpanGroup}>
+              <Text style={styles.timeSpanText}>
+                {formatMinutesTo12Hour(item.start_time_minutes)} - {formatMinutesTo12Hour(item.end_time_minutes)} ({durationHrs}h)
+              </Text>
+              <TouchableOpacity style={styles.deleteSlotBtn} onPress={() => handleDeleteSlot(item.slot_id)}>
+                <Text style={styles.deleteSlotText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <Text style={styles.subjectText}>{item.subject_name}</Text>
+          {showPreviewPane && item.topic ? <Text style={styles.topicText}>📌 {item.topic}</Text> : null}
+
+          <View style={styles.cardFooterRow}>
+            {showDetailsPane ? (
+              <View style={styles.qTargetBadge}>
+                <Text style={styles.qTargetText}>🎯 Goal: {item.target_questions} Qs</Text>
+              </View>
+            ) : <View />}
+
+            <View style={styles.actionBtnGroup}>
+              <TouchableOpacity
+                style={[styles.statusBtn, isCompleted && styles.completedActiveBtn]}
+                onPress={() => handleUpdateStatus(item.slot_id, 'completed')}
+              >
+                <Text style={[styles.statusBtnText, isCompleted && styles.statusBtnTextActive]}>
+                  {isCompleted ? '✓ Done' : 'Mark Done'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusBtn, isSkipped && styles.skippedActiveBtn]}
+                onPress={() => handleUpdateStatus(item.slot_id, 'skipped')}
+              >
+                <Text style={[styles.statusBtnText, isSkipped && styles.statusBtnTextActive]}>
+                  {isSkipped ? '✕ Missed' : 'Skip'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -579,14 +1007,12 @@ export default function App() {
       <View style={[styles.mainLayout, isDesktop && styles.desktopLayout]}>
         {/* Top Header */}
         <View style={styles.topHeader}>
-          {/* Row 1: Title + Action Buttons */}
           <View style={styles.headerTopRow}>
             <View style={styles.titleContainer}>
               <Text style={styles.portalTitle} numberOfLines={1}>Student Timetable</Text>
             </View>
 
             <View style={styles.headerRightGroup}>
-              {/* Auth / Account Profile Button (Updated with Username Tag) */}
               <TouchableOpacity
                 style={[styles.headerButton, currentUser && { borderColor: activeTheme.primary }]}
                 onPress={() => setIsAuthModalOpen(true)}
@@ -596,18 +1022,15 @@ export default function App() {
                 </Text>
               </TouchableOpacity>
 
-              {/* Notification Alerts */}
               <TouchableOpacity style={styles.headerButton} onPress={() => setIsNotifModalOpen(true)}>
                 <Text style={styles.headerButtonText}>🔔 Alerts</Text>
                 {notifEnabled && <View style={styles.notifStatusDot} />}
               </TouchableOpacity>
 
-              {/* Theme Picker */}
               <TouchableOpacity style={styles.headerButton} onPress={() => setIsThemeModalOpen(true)}>
                 <Text style={styles.headerButtonText}>{activeTheme.icon}</Text>
               </TouchableOpacity>
 
-              {/* Cloud Sync */}
               <TouchableOpacity style={styles.headerButton} onPress={handleCloudSync} disabled={isSyncing}>
                 {isSyncing ? (
                   <ActivityIndicator size="small" color={activeTheme.textPrimary} />
@@ -618,7 +1041,7 @@ export default function App() {
             </View>
           </View>
 
-          {/* Row 2: Target Exam Badge & Countdown */}
+          {/* Exam Goal & Countdown */}
           <View style={styles.headerSubRow}>
             <TouchableOpacity style={styles.examTag} onPress={handleOpenGoalModal}>
               <Text style={styles.examTagText} numberOfLines={1}>{examName} ✏️</Text>
@@ -628,30 +1051,6 @@ export default function App() {
             </Text>
           </View>
         </View>
-
-        {/* Guest Slots Sync Prompt Banner */}
-        {currentUser && guestSlotsCount > 0 && (
-          <TouchableOpacity
-            style={[styles.notifToggleCard, { marginHorizontal: 12, marginTop: 8, borderColor: activeTheme.primary }]}
-            onPress={async () => {
-              const res = await syncService.mergeGuestSlotsToAccount();
-              refreshSlots();
-              showAppAlert('Sessions Merged', `Successfully transferred ${res.count} local study sessions into your account!`);
-            }}
-          >
-            <View>
-              <Text style={{ fontSize: 11, fontWeight: '800', color: activeTheme.primary }}>
-                📥 Found {guestSlotsCount} offline study session(s)
-              </Text>
-              <Text style={{ fontSize: 10, color: activeTheme.textSecondary }}>
-                Tap here to merge them into your registered account now.
-              </Text>
-            </View>
-            <View style={[styles.notifSwitchBtn, { backgroundColor: activeTheme.primary }]}>
-              <Text style={styles.notifSwitchText}>Merge</Text>
-            </View>
-          </TouchableOpacity>
-        )}
 
         {/* Real-time Metrics Card */}
         <View style={styles.metricsContainer}>
@@ -672,6 +1071,163 @@ export default function App() {
             <Text style={styles.metricLabel}>Questions</Text>
           </View>
         </View>
+
+        {/* 📅 FULL INTERACTIVE MONTH & WEEK CALENDAR */}
+        <View style={styles.calendarCard}>
+          <View style={styles.calendarNavRow}>
+            <View style={styles.calendarNavControls}>
+              <TouchableOpacity style={styles.calendarMonthArrowBtn} onPress={() => handleStepMonth(-1)}>
+                <Text style={styles.calendarMonthArrowText}>◀</Text>
+              </TouchableOpacity>
+              <Text style={styles.calendarMonthLabel}>
+                {MONTH_NAMES[viewMonth]} {viewYear}
+              </Text>
+              <TouchableOpacity style={styles.calendarMonthArrowBtn} onPress={() => handleStepMonth(1)}>
+                <Text style={styles.calendarMonthArrowText}>▶</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.calendarRightActions}>
+              <TouchableOpacity
+                style={styles.calendarViewModeBtn}
+                onPress={() => setCalendarViewMode((m) => (m === 'month' ? 'week' : 'month'))}
+              >
+                <Text style={styles.calendarViewModeText}>
+                  {calendarViewMode === 'month' ? '↔ Strip' : '📅 Month'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.calendarTodayBtn}
+                onPress={() => {
+                  setSelectedDate(todayIso);
+                  const [y, m] = todayIso.split('-').map(Number);
+                  setViewYear(y);
+                  setViewMonth(m - 1);
+                }}
+              >
+                <Text style={styles.calendarTodayText}>Today</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {calendarViewMode === 'month' ? (
+            <View>
+              <View style={styles.monthWeekHeadersRow}>
+                {DAYS.map((d) => (
+                  <View key={d.short} style={styles.monthWeekHeaderCol}>
+                    <Text style={styles.monthWeekHeaderText}>{d.short}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.monthGridRow}>
+                {monthGridData.map((cell) => {
+                  if (!cell.dayNum) {
+                    return <View key={cell.key} style={styles.monthGridCell} />;
+                  }
+                  return (
+                    <TouchableOpacity
+                      key={cell.key}
+                      style={[
+                        styles.monthGridCell,
+                        cell.isToday && styles.monthGridCellToday,
+                        cell.isSelected && styles.monthGridCellSelected,
+                      ]}
+                      onPress={() => setSelectedDate(cell.iso)}
+                    >
+                      <Text
+                        style={[
+                          styles.monthGridCellText,
+                          cell.isSelected && styles.monthGridCellTextSelected,
+                        ]}
+                      >
+                        {cell.dayNum}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.weekStripContainer}>
+              {weekStripDays.map((d) => (
+                <TouchableOpacity
+                  key={d.iso}
+                  style={[
+                    styles.weekStripDayCard,
+                    d.isSelected && { backgroundColor: activeTheme.primary, borderColor: activeTheme.primary },
+                    d.isToday && !d.isSelected && { borderColor: activeTheme.primary, borderWidth: 1.5 },
+                  ]}
+                  onPress={() => setSelectedDate(d.iso)}
+                >
+                  <Text style={[styles.weekStripDayName, d.isSelected && { color: '#FFFFFF', fontWeight: '700' }]}>
+                    {d.dayShort}
+                  </Text>
+                  <Text style={[styles.weekStripDayNum, d.isSelected && { color: '#FFFFFF', fontWeight: '800' }]}>
+                    {d.dayNum}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Daily Schedule Navigation Banner */}
+        <View style={styles.dayBannerCard}>
+          <TouchableOpacity style={styles.dayBannerBtn} onPress={() => handleStepDay(-1)}>
+            <Text style={styles.dayBannerBtnText}>◀ Prev</Text>
+          </TouchableOpacity>
+
+          <View>
+            <Text style={styles.dayBannerTitle}>
+              {DAYS[selectedDay - 1].full}, {selectedDateObj.getDate()} {MONTH_NAMES[selectedDateObj.getMonth()]}
+            </Text>
+            <Text style={styles.dayBannerSub}>
+              {slots.length} Session(s) Scheduled
+            </Text>
+          </View>
+
+          <TouchableOpacity style={styles.dayBannerBtn} onPress={() => handleStepDay(1)}>
+            <Text style={styles.dayBannerBtnText}>Next ▶</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ⚡ Active Recall Revisions Due Today */}
+        {revisionsDue.length > 0 && (
+          <View style={styles.recallDueCard}>
+            <View style={styles.recallDueHeader}>
+              <Text style={styles.recallDueTitle}>⚡ ACTIVE RECALL DUE TODAY</Text>
+              <Text style={styles.recallDueCount}>
+                {revisionsDue.filter((r) => r.is_completed === 1).length}/{revisionsDue.length} Completed
+              </Text>
+            </View>
+
+            {revisionsDue.map((rev) => {
+              const isDone = rev.is_completed === 1;
+              return (
+                <TouchableOpacity
+                  key={rev.id}
+                  style={[styles.recallDueRow, isDone && { opacity: 0.65 }]}
+                  onPress={() => handleToggleRevision(rev)}
+                >
+                  <View style={[styles.recallCheckbox, isDone && styles.recallCheckboxChecked]}>
+                    {isDone && <Text style={styles.recallCheckmark}>✓</Text>}
+                  </View>
+
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={[styles.recallTopicText, isDone && styles.recallTopicDone]}>
+                      {rev.topic}
+                    </Text>
+                    <Text style={styles.recallMetaText}>
+                      {rev.subject_name} • Stage {rev.interval_stage} ({rev.interval_stage === 1 ? '48h recall' : rev.interval_stage === 2 ? '7d recall' : '21d recall'})
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Categories Rail & Filter Bar */}
         <View style={styles.categoryTrackerSection}>
@@ -727,104 +1283,58 @@ export default function App() {
           </ScrollView>
         </View>
 
-        {/* Day Selector */}
-        <View style={styles.daySelectorWrapper}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayScrollContent}>
-            {DAYS.map((d, idx) => {
-              const dayNum = idx + 1;
-              const isActive = selectedDay === dayNum;
-              return (
-                <TouchableOpacity
-                  key={d.short}
-                  style={[styles.dayTab, isActive && styles.dayTabActive]}
-                  onPress={() => setSelectedDay(dayNum)}
-                >
-                  <Text style={[styles.dayTabShort, isActive && styles.dayTabShortActive]}>{d.short}</Text>
-                  <Text style={[styles.dayTabFull, isActive && styles.dayTabFullActive]}>{d.full}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+        {/* 🗂️ EXPLORER "SORT ⌵" & "VIEW ⌵" TOOLBAR */}
+        <View style={styles.viewToolbarContainer}>
+          <View style={styles.viewToolbarLeft}>
+            {/* Sort ⌵ Dropdown Button */}
+            <TouchableOpacity
+              style={[styles.viewDropdownTriggerBtn, isSortMenuOpen && styles.viewDropdownTriggerBtnActive]}
+              onPress={() => {
+                setIsViewMenuOpen(false);
+                setIsSortMenuOpen((prev) => !prev);
+              }}
+            >
+              <Text style={styles.viewDropdownTriggerText}>Sort</Text>
+              <Text style={styles.viewDropdownCaret}>▼</Text>
+            </TouchableOpacity>
+
+            {/* View ⌵ Dropdown Button */}
+            <TouchableOpacity
+              style={[styles.viewDropdownTriggerBtn, isViewMenuOpen && styles.viewDropdownTriggerBtnActive]}
+              onPress={() => {
+                setIsSortMenuOpen(false);
+                setIsViewMenuOpen((prev) => !prev);
+              }}
+            >
+              <Text style={{ fontSize: 12 }}>🔲</Text>
+              <Text style={styles.viewDropdownTriggerText}>View</Text>
+              <Text style={styles.viewDropdownCaret}>▼</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.viewCountLabel}>
+            {sortedAndFilteredSlots.length} item(s)
+          </Text>
         </View>
 
         {/* Study Stream */}
         <FlatList
-          data={visibleSlots}
+          key={currentViewLayout === 'tiles' || currentViewLayout === 'medium' ? 'grid_2' : 'list_1'}
+          numColumns={currentViewLayout === 'tiles' || currentViewLayout === 'medium' ? 2 : 1}
+          columnWrapperStyle={currentViewLayout === 'tiles' || currentViewLayout === 'medium' ? styles.gridStreamRow : undefined}
+          data={sortedAndFilteredSlots}
           keyExtractor={(item) => item.slot_id}
           contentContainerStyle={styles.streamContent}
           ListEmptyComponent={
             <View style={styles.emptyCard}>
               <Text style={styles.emptyIcon}>📝</Text>
-              <Text style={styles.emptyTitle}>No sessions scheduled for {DAYS[selectedDay - 1].full}</Text>
+              <Text style={styles.emptyTitle}>No sessions scheduled for this date</Text>
               <Text style={styles.emptySub}>
-                {currentUser ? `No sessions found in account "@${currentUser.username || currentUser.name}".` : 'Running in Guest Mode.'} Tap "+ Add Study Slot" to add one.
+                Tap "+ Add Study Slot" below to schedule a session for {DAYS[selectedDay - 1].full}, {selectedDateObj.getDate()} {MONTH_NAMES[selectedDateObj.getMonth()]}.
               </Text>
             </View>
           }
-          renderItem={({ item }) => {
-            const cat = categories.find((c) => c.id === item.slot_type) || {
-              name: item.slot_type,
-              icon: '📌',
-              color_hex: activeTheme.primary,
-              bg_hex: activeTheme.surfaceElevated,
-            };
-            const durationHrs = ((item.end_time_minutes - item.start_time_minutes) / 60).toFixed(1);
-            const isCompleted = item.status === 'completed';
-            const isSkipped = item.status === 'skipped';
-
-            return (
-              <View style={[styles.slotCard, isCompleted && styles.slotCardCompleted]}>
-                <View style={[styles.slotTypeAccent, { backgroundColor: cat.color_hex }]} />
-
-                <View style={styles.slotBody}>
-                  <View style={styles.cardHeaderRow}>
-                    <View style={[styles.typeBadge, { backgroundColor: cat.bg_hex }]}>
-                      <Text style={[styles.typeBadgeText, { color: cat.color_hex }]}>
-                        {cat.icon} {cat.name}
-                      </Text>
-                    </View>
-                    <View style={styles.timeSpanGroup}>
-                      <Text style={styles.timeSpanText}>
-                        {formatMinutesTo12Hour(item.start_time_minutes)} - {formatMinutesTo12Hour(item.end_time_minutes)} ({durationHrs}h)
-                      </Text>
-                      <TouchableOpacity style={styles.deleteSlotBtn} onPress={() => handleDeleteSlot(item.slot_id)}>
-                        <Text style={styles.deleteSlotText}>✕</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  <Text style={styles.subjectText}>{item.subject_name}</Text>
-                  {item.topic ? <Text style={styles.topicText}>📌 {item.topic}</Text> : null}
-
-                  <View style={styles.cardFooterRow}>
-                    <View style={styles.qTargetBadge}>
-                      <Text style={styles.qTargetText}>🎯 Goal: {item.target_questions} Qs</Text>
-                    </View>
-
-                    <View style={styles.actionBtnGroup}>
-                      <TouchableOpacity
-                        style={[styles.statusBtn, isCompleted && styles.completedActiveBtn]}
-                        onPress={() => handleUpdateStatus(item.slot_id, 'completed')}
-                      >
-                        <Text style={[styles.statusBtnText, isCompleted && styles.statusBtnTextActive]}>
-                          {isCompleted ? '✓ Done' : 'Mark Done'}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[styles.statusBtn, isSkipped && styles.skippedActiveBtn]}
-                        onPress={() => handleUpdateStatus(item.slot_id, 'skipped')}
-                      >
-                        <Text style={[styles.statusBtnText, isSkipped && styles.statusBtnTextActive]}>
-                          {isSkipped ? '✕ Missed' : 'Skip'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            );
-          }}
+          renderItem={renderSlotItem}
         />
 
         {/* Floating Add Trigger */}
@@ -832,7 +1342,267 @@ export default function App() {
           <Text style={styles.fabIcon}>+ Add Study Slot</Text>
         </TouchableOpacity>
 
-        {/* SEPARATE AUTH MODAL */}
+        {/* 🔲 EXPLORER VIEW DROPDOWN MENU MODAL */}
+        <Modal visible={isViewMenuOpen} transparent animationType="fade" onRequestClose={() => setIsViewMenuOpen(false)}>
+          <TouchableOpacity style={styles.explorerMenuBackdrop} activeOpacity={1} onPress={() => setIsViewMenuOpen(false)}>
+            <View style={[styles.explorerMenuCard, { marginLeft: 65 }]}>
+              {/* Extra large icons */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentViewLayout === 'extra_large' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentViewLayout('extra_large'); setIsViewMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentViewLayout === 'extra_large' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>🔲</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Extra large icons</Text>
+              </TouchableOpacity>
+
+              {/* Large icons */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentViewLayout === 'large' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentViewLayout('large'); setIsViewMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentViewLayout === 'large' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>🔲</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Large icons</Text>
+              </TouchableOpacity>
+
+              {/* Medium icons */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentViewLayout === 'medium' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentViewLayout('medium'); setIsViewMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentViewLayout === 'medium' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>🔲</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Medium icons</Text>
+              </TouchableOpacity>
+
+              {/* Small icons */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentViewLayout === 'small' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentViewLayout('small'); setIsViewMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentViewLayout === 'small' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>⸬</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Small icons</Text>
+              </TouchableOpacity>
+
+              {/* List */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentViewLayout === 'list' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentViewLayout('list'); setIsViewMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentViewLayout === 'list' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>☰</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>List</Text>
+              </TouchableOpacity>
+
+              {/* Details */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentViewLayout === 'details' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentViewLayout('details'); setIsViewMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentViewLayout === 'details' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>≡</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Details</Text>
+              </TouchableOpacity>
+
+              {/* Tiles */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentViewLayout === 'tiles' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentViewLayout('tiles'); setIsViewMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentViewLayout === 'tiles' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>⊞</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Tiles</Text>
+              </TouchableOpacity>
+
+              {/* Content */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentViewLayout === 'content' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentViewLayout('content'); setIsViewMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentViewLayout === 'content' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>⁝≡</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Content</Text>
+              </TouchableOpacity>
+
+              {/* Divider */}
+              <View style={styles.explorerMenuDivider} />
+
+              {/* Details pane toggle */}
+              <TouchableOpacity
+                style={styles.explorerMenuItem}
+                onPress={() => setShowDetailsPane((prev) => !prev)}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {showDetailsPane && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={[styles.explorerMenuIcon, { color: '#38BDF8' }]}>◨</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Details pane</Text>
+              </TouchableOpacity>
+
+              {/* Preview pane toggle */}
+              <TouchableOpacity
+                style={styles.explorerMenuItem}
+                onPress={() => setShowPreviewPane((prev) => !prev)}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {showPreviewPane && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={[styles.explorerMenuIcon, { color: '#38BDF8' }]}>◧</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Preview pane</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* ⇅ SORT DROPDOWN MENU MODAL */}
+        <Modal visible={isSortMenuOpen} transparent animationType="fade" onRequestClose={() => setIsSortMenuOpen(false)}>
+          <TouchableOpacity style={styles.explorerMenuBackdrop} activeOpacity={1} onPress={() => setIsSortMenuOpen(false)}>
+            <View style={[styles.explorerMenuCard, { marginLeft: 12 }]}>
+              {/* By Time */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentSortOrder === 'time' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentSortOrder('time'); setIsSortMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentSortOrder === 'time' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>⏰</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Time (Earliest first)</Text>
+              </TouchableOpacity>
+
+              {/* By Duration */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentSortOrder === 'duration' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentSortOrder('duration'); setIsSortMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentSortOrder === 'duration' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>⏳</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Duration (Longest first)</Text>
+              </TouchableOpacity>
+
+              {/* By Subject */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentSortOrder === 'subject' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentSortOrder('subject'); setIsSortMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentSortOrder === 'subject' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>🔤</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Subject (A - Z)</Text>
+              </TouchableOpacity>
+
+              {/* By Question Goals */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentSortOrder === 'target' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentSortOrder('target'); setIsSortMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentSortOrder === 'target' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>🎯</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Target Questions</Text>
+              </TouchableOpacity>
+
+              {/* By Status */}
+              <TouchableOpacity
+                style={[styles.explorerMenuItem, currentSortOrder === 'status' && styles.explorerMenuItemHover]}
+                onPress={() => { setCurrentSortOrder('status'); setIsSortMenuOpen(false); }}
+              >
+                <View style={styles.explorerBulletCol}>
+                  {currentSortOrder === 'status' && <Text style={styles.explorerBulletDot}>•</Text>}
+                </View>
+                <View style={styles.explorerMenuIconCol}>
+                  <Text style={styles.explorerMenuIcon}>✓</Text>
+                </View>
+                <Text style={styles.explorerMenuLabel}>Status (Pending first)</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* 🧠 Spaced Repetition Modal Prompt */}
+        <Modal visible={isRecallModalOpen} animationType="fade" transparent onRequestClose={() => setIsRecallModalOpen(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={[styles.modalCard, isDesktop && { maxWidth: 440 }]}>
+              <Text style={[styles.modalHeading, { textAlign: 'center' }]}>🧠 Schedule Active Recall?</Text>
+              <Text style={[styles.modalSubheading, { textAlign: 'center', marginBottom: 12 }]}>
+                Solidify <Text style={{ fontWeight: '700', color: activeTheme.textPrimary }}>"{recallPromptSlot?.topic || recallPromptSlot?.subject_name}"</Text> in long-term memory.
+              </Text>
+
+              <View style={styles.recallPreviewBox}>
+                <Text style={styles.recallPreviewRow}>
+                  • <Text style={{ fontWeight: '700', color: activeTheme.primary }}>Day +2</Text> ({addDaysToIso(selectedDate, 2)}): Rapid Concept Check
+                </Text>
+                <Text style={styles.recallPreviewRow}>
+                  • <Text style={{ fontWeight: '700', color: activeTheme.primary }}>Day +7</Text> ({addDaysToIso(selectedDate, 7)}): PYQ & Problem Drill
+                </Text>
+                <Text style={styles.recallPreviewRow}>
+                  • <Text style={{ fontWeight: '700', color: activeTheme.primary }}>Day +21</Text> ({addDaysToIso(selectedDate, 21)}): Comprehensive Recall
+                </Text>
+              </View>
+
+              <View style={[styles.modalActionGroup, { marginTop: 16 }]}>
+                <TouchableOpacity style={styles.abortBtn} onPress={() => setIsRecallModalOpen(false)}>
+                  <Text style={styles.abortBtnText}>Maybe Later</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirmSpacedRepetition}>
+                  <Text style={styles.confirmBtnText}>Schedule Recall</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Auth Modal */}
         <AuthModal
           visible={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
@@ -840,10 +1610,11 @@ export default function App() {
           onAuthSuccess={(user) => {
             setCurrentUser(user);
             refreshSlots();
+            refreshRevisions();
           }}
         />
 
-        {/* Notification Center Modal */}
+        {/* Notifications Modal */}
         <Modal visible={isNotifModalOpen} animationType="fade" transparent>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, isDesktop && { maxWidth: 460 }]}>
@@ -906,7 +1677,7 @@ export default function App() {
           </View>
         </Modal>
 
-        {/* Goal & Countdown Settings */}
+        {/* Goal Modal */}
         <Modal visible={isGoalModalOpen} animationType="fade" transparent>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, isDesktop && { maxWidth: 420 }]}>
@@ -916,7 +1687,7 @@ export default function App() {
 
                 <Text style={styles.fieldLabel}>Exam Title</Text>
                 <TextInput
-                  placeholder="e.g. GATE CSE, UPSC Prelims, SSC CGL"
+                  placeholder="e.g. GATE CSE, UPSC Prelims"
                   placeholderTextColor={activeTheme.textMuted}
                   style={styles.textInput}
                   value={tempExamName}
@@ -945,7 +1716,7 @@ export default function App() {
           </View>
         </Modal>
 
-        {/* Theme Selector */}
+        {/* Theme Modal */}
         <Modal visible={isThemeModalOpen} animationType="fade" transparent>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, isDesktop && { maxWidth: 400 }]}>
@@ -983,7 +1754,7 @@ export default function App() {
           </View>
         </Modal>
 
-        {/* Standalone Main Screen Category Modal */}
+        {/* Category Modal */}
         <Modal visible={isMainCatModalOpen} animationType="fade" transparent>
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, isDesktop && { maxWidth: 420 }]}>
@@ -1042,8 +1813,31 @@ export default function App() {
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalCard, isDesktop && { maxWidth: 500 }]}>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <Text style={styles.modalHeading}>Schedule Session</Text>
-                <Text style={styles.modalSubheading}>{DAYS[selectedDay - 1].full} Routine Plan</Text>
+                <Text style={styles.modalHeading}>Schedule Study Session</Text>
+                <Text style={styles.modalSubheading}>
+                  Target Date: {selectedDate} ({DAYS[selectedDay - 1].full})
+                </Text>
+
+                <Text style={styles.fieldLabel}>Schedule Frequency</Text>
+                <View style={styles.frequencyToggleRow}>
+                  <TouchableOpacity
+                    style={[styles.frequencyPill, slotFrequency === 'specific_date' && styles.frequencyPillActive]}
+                    onPress={() => setSlotFrequency('specific_date')}
+                  >
+                    <Text style={[styles.frequencyPillText, slotFrequency === 'specific_date' && styles.frequencyPillTextActive]}>
+                      📌 Only on {selectedDate}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.frequencyPill, slotFrequency === 'weekly' && styles.frequencyPillActive]}
+                    onPress={() => setSlotFrequency('weekly')}
+                  >
+                    <Text style={[styles.frequencyPillText, slotFrequency === 'weekly' && styles.frequencyPillTextActive]}>
+                      🔄 Every {DAYS[selectedDay - 1].full}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
                 <Text style={styles.fieldLabel}>Subject / Course</Text>
                 <TextInput
@@ -1154,9 +1948,8 @@ export default function App() {
                   ))}
                 </View>
 
-                {/* Digital Watch Dual Controls */}
+                {/* Digital Watch Controls */}
                 <View style={styles.dualWatchContainer}>
-                  {/* Start Watch */}
                   <View style={styles.watchCard}>
                     <View style={styles.watchHeader}>
                       <Text style={styles.watchHeaderTitle}>🟢 Start Watch</Text>
@@ -1202,7 +1995,6 @@ export default function App() {
                     </View>
                   </View>
 
-                  {/* End Watch */}
                   <View style={styles.watchCard}>
                     <View style={styles.watchHeader}>
                       <Text style={styles.watchHeaderTitle}>🔴 End Watch</Text>
@@ -1260,7 +2052,6 @@ export default function App() {
                   onChangeText={setTargetQuestions}
                 />
 
-                {/* Live Interval Validation Preview */}
                 <View style={[styles.previewBanner, isTimeIntervalValid ? styles.previewBannerValid : styles.previewBannerInvalid]}>
                   <Text style={[styles.previewBannerText, { color: isTimeIntervalValid ? '#10B981' : '#EF4444' }]}>
                     {isTimeIntervalValid
@@ -1286,7 +2077,7 @@ export default function App() {
           </View>
         </Modal>
 
-        {/* Custom In-App Modal Dialog */}
+        {/* Custom Dialog */}
         <Modal visible={dialog.visible} animationType="fade" transparent onRequestClose={closeDialog}>
           <View style={styles.customDialogOverlay}>
             <View style={styles.customDialogCard}>

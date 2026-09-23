@@ -139,3 +139,15 @@ eas build -p android --profile preview
 
 *(Or add `--local` if you prefer compiling it locally without waiting in the cloud queue).*
 4. **Result:** EAS generates a new `.apk` download link. You must share this new `.apk` file with your students so they can install/upgrade over their existing version.
+
+
+
+Step-by-Step Verification
+Rebuild the D1 Local Schema:
+
+Bash
+cd D:\ALL-APP-FILES\timetable-app\api
+npx wrangler d1 migrations apply student_timetable_db --local
+npm run dev
+Reload Web Application:
+Press Ctrl + F5 on http://localhost:808

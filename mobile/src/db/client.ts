@@ -12,10 +12,25 @@ export interface CategoryItem {
   is_custom?: number;
 }
 
+export interface RevisionMilestone {
+  id: string;
+  user_id: string;
+  slot_id: string;
+  subject_name: string;
+  topic: string;
+  interval_stage: number; // 1 = +2d, 2 = +7d, 3 = +21d
+  due_date: string;       // 'YYYY-MM-DD'
+  is_completed: number;   // 0 or 1
+  created_at: number;
+  updated_at: number;
+  is_deleted?: number;
+}
+
 export interface GuestSnapshot {
   slots: any[];
   subjects: any[];
   attendance: any[];
+  revisions: RevisionMilestone[];
 }
 
 export interface DatabaseDriver {
@@ -39,11 +54,12 @@ export interface WebDBState {
   slots: any[];
   attendance: any[];
   categories: CategoryItem[];
+  revisions: RevisionMilestone[];
   queue: any[];
   meta: Record<string, string>;
 }
 
-const STORAGE_KEY = 'exam_timetable_v7_stable';
+const STORAGE_KEY = 'exam_timetable_v9_dates';
 
 function loadWebState(): WebDBState {
   if (typeof window !== 'undefined') {
@@ -57,7 +73,8 @@ function loadWebState(): WebDBState {
             subjects: parsed.subjects || [],
             slots: parsed.slots || [],
             attendance: parsed.attendance || [],
-            categories: parsed.categories && parsed.categories.length > 0 ? parsed.categories : [...DEFAULT_CATEGORIES],
+            categories: parsed.categories?.length ? parsed.categories : [...DEFAULT_CATEGORIES],
+            revisions: parsed.revisions || [],
             queue: parsed.queue || [],
             meta: parsed.meta || {},
           };
@@ -74,6 +91,7 @@ function loadWebState(): WebDBState {
     slots: [],
     attendance: [],
     categories: [...DEFAULT_CATEGORIES],
+    revisions: [],
     queue: [],
     meta: {},
   };
@@ -102,15 +120,17 @@ export function getGuestSnapshot(): GuestSnapshot {
       slots: raw.slots.filter((s) => s.user_id === GUEST_USER_ID && !s.is_deleted),
       subjects: raw.subjects.filter((sub) => sub.user_id === GUEST_USER_ID && !sub.is_deleted),
       attendance: raw.attendance.filter((a) => a.user_id === GUEST_USER_ID && !a.is_deleted),
+      revisions: raw.revisions.filter((r) => r.user_id === GUEST_USER_ID && !r.is_deleted),
     };
   } else {
     try {
       const slots = db.getAllSync('SELECT * FROM timetable_slots WHERE user_id = ? AND is_deleted = 0;', [GUEST_USER_ID]);
       const subjects = db.getAllSync('SELECT * FROM subjects WHERE user_id = ? AND is_deleted = 0;', [GUEST_USER_ID]);
       const attendance = db.getAllSync('SELECT * FROM attendance_records WHERE user_id = ? AND is_deleted = 0;', [GUEST_USER_ID]);
-      return { slots, subjects, attendance };
+      const revisions = db.getAllSync<RevisionMilestone>('SELECT * FROM revision_milestones WHERE user_id = ? AND is_deleted = 0;', [GUEST_USER_ID]);
+      return { slots, subjects, attendance, revisions };
     } catch {
-      return { slots: [], subjects: [], attendance: [] };
+      return { slots: [], subjects: [], attendance: [], revisions: [] };
     }
   }
 }
@@ -133,6 +153,13 @@ export function transferGuestDataToUser(targetUserId: string): { slotsCount: num
       }
     });
 
+    webData.revisions.forEach((r) => {
+      if (r.user_id === GUEST_USER_ID) {
+        r.user_id = targetUserId;
+        r.updated_at = Date.now();
+      }
+    });
+
     persistWebState();
   } else {
     const now = Date.now();
@@ -144,6 +171,7 @@ export function transferGuestDataToUser(targetUserId: string): { slotsCount: num
         db.runSync('UPDATE timetable_slots SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
         db.runSync('UPDATE subjects SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
         db.runSync('UPDATE attendance_records SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
+        db.runSync('UPDATE revision_milestones SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
       });
     } catch (e) {
       console.warn('Native transfer failed:', e);
@@ -160,13 +188,29 @@ const webDbDriver: DatabaseDriver = {
       return [...webData.categories] as unknown as T[];
     }
 
+    if (query.includes('FROM revision_milestones')) {
+      const userId = params[0];
+      const dueDate = params[1];
+      const results = webData.revisions
+        .filter((r) => r.user_id === userId && (!dueDate || r.due_date === dueDate) && !r.is_deleted)
+        .sort((a, b) => a.interval_stage - b.interval_stage);
+      return results as unknown as T[];
+    }
+
     if (query.includes('FROM timetable_slots')) {
       const date = params[0];
       const userId = params[1];
-      const dayOfWeek = Number(params[2]);
+      const targetDate = params[2];
+      const dayOfWeek = Number(params[3]);
 
       const activeSlots = webData.slots
-        .filter((s) => s.user_id === userId && s.day_of_week === dayOfWeek && !s.is_deleted)
+        .filter((s) => {
+          if (s.user_id !== userId || s.is_deleted) return false;
+          if (s.specific_date) {
+            return s.specific_date === targetDate;
+          }
+          return s.day_of_week === dayOfWeek;
+        })
         .sort((a, b) => a.start_time_minutes - b.start_time_minutes);
 
       return activeSlots.map((slot) => {
@@ -181,6 +225,7 @@ const webDbDriver: DatabaseDriver = {
           slot_type: slot.slot_type || 'theory',
           topic: slot.topic || '',
           target_questions: slot.target_questions || 0,
+          specific_date: slot.specific_date || null,
           status: att ? att.status : null,
         } as unknown as T;
       });
@@ -207,19 +252,22 @@ const webDbDriver: DatabaseDriver = {
       return (found ? { ...found } : null) as unknown as T;
     }
 
-    if (query.includes('MAX(start_time_minutes')) {
+    if (query.includes('start_time_minutes < ? AND end_time_minutes > ?')) {
       const userId = params[0];
-      const dayOfWeek = Number(params[1]);
-      const startM = Number(params[2]);
+      const targetDate = params[1];
+      const dayOfWeek = Number(params[2]);
       const endM = Number(params[3]);
+      const startM = Number(params[4]);
 
-      const collision = webData.slots.find(
-        (s) =>
-          s.user_id === userId &&
-          s.day_of_week === dayOfWeek &&
-          !s.is_deleted &&
-          Math.max(s.start_time_minutes, startM) < Math.min(s.end_time_minutes, endM)
-      );
+      const collision = webData.slots.find((s) => {
+        if (s.user_id !== userId || s.is_deleted) return false;
+        if (s.specific_date) {
+          if (s.specific_date !== targetDate) return false;
+        } else {
+          if (s.day_of_week !== dayOfWeek) return false;
+        }
+        return s.start_time_minutes < endM && s.end_time_minutes > startM;
+      });
       return (collision ? { id: collision.id } : null) as unknown as T;
     }
 
@@ -231,7 +279,32 @@ const webDbDriver: DatabaseDriver = {
   },
 
   runSync(query: string, params: any[] = []): void {
-    if (query.includes('INSERT INTO users')) {
+    if (query.includes('INSERT INTO revision_milestones')) {
+      const [id, user_id, slot_id, subject_name, topic, interval_stage, due_date, is_completed, created_at, updated_at] = params;
+      const idx = webData.revisions.findIndex((r) => r.id === id);
+      const row: RevisionMilestone = {
+        id,
+        user_id,
+        slot_id,
+        subject_name,
+        topic,
+        interval_stage: Number(interval_stage) || 1,
+        due_date,
+        is_completed: is_completed ? 1 : 0,
+        created_at: created_at || Date.now(),
+        updated_at: updated_at || Date.now(),
+        is_deleted: 0,
+      };
+      if (idx >= 0) webData.revisions[idx] = row;
+      else webData.revisions.push(row);
+    } else if (query.includes('UPDATE revision_milestones SET is_completed')) {
+      const [is_completed, updated_at, id] = params;
+      const rev = webData.revisions.find((r) => r.id === id);
+      if (rev) {
+        rev.is_completed = Number(is_completed) || 0;
+        rev.updated_at = updated_at || Date.now();
+      }
+    } else if (query.includes('INSERT INTO users')) {
       const [id, username, email, name, created_at] = params;
       const cleanUser = {
         id,
@@ -257,9 +330,23 @@ const webDbDriver: DatabaseDriver = {
       if (idx >= 0) webData.subjects[idx] = row;
       else webData.subjects.push(row);
     } else if (query.includes('INSERT INTO timetable_slots')) {
-      const [id, user_id, subject_id, day_of_week, start_time_minutes, end_time_minutes, slot_type, topic, target_questions, created_at, updated_at] = params;
+      const [id, user_id, subject_id, day_of_week, specific_date, start_time_minutes, end_time_minutes, slot_type, topic, target_questions, created_at, updated_at] = params;
       const idx = webData.slots.findIndex((s) => s.id === id);
-      const row = { id, user_id, subject_id, day_of_week, start_time_minutes, end_time_minutes, slot_type, topic, target_questions, created_at, updated_at, is_deleted: 0 };
+      const row = {
+        id,
+        user_id,
+        subject_id,
+        day_of_week,
+        specific_date: specific_date || null,
+        start_time_minutes,
+        end_time_minutes,
+        slot_type,
+        topic,
+        target_questions,
+        created_at,
+        updated_at,
+        is_deleted: 0,
+      };
       if (idx >= 0) webData.slots[idx] = row;
       else webData.slots.push(row);
     } else if (query.includes('DELETE FROM timetable_slots')) {
@@ -345,6 +432,7 @@ function setupNativeSQLite(database: any): DatabaseDriver {
         user_id TEXT NOT NULL,
         subject_id TEXT NOT NULL,
         day_of_week INTEGER NOT NULL,
+        specific_date TEXT,
         start_time_minutes INTEGER NOT NULL,
         end_time_minutes INTEGER NOT NULL,
         slot_type TEXT DEFAULT 'theory',
@@ -365,6 +453,20 @@ function setupNativeSQLite(database: any): DatabaseDriver {
         is_deleted INTEGER DEFAULT 0,
         UNIQUE(slot_id, date)
       );
+      CREATE TABLE IF NOT EXISTS revision_milestones (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        slot_id TEXT,
+        subject_name TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        interval_stage INTEGER DEFAULT 1,
+        due_date TEXT NOT NULL,
+        is_completed INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_deleted INTEGER DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_revisions_user_date ON revision_milestones(user_id, due_date) WHERE is_deleted = 0;
       CREATE TABLE IF NOT EXISTS sync_queue (
         queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
         entity_table TEXT NOT NULL,
@@ -378,7 +480,14 @@ function setupNativeSQLite(database: any): DatabaseDriver {
       );
     `);
 
-    // Seed default categories into native SQLite if empty
+    // Safely add specific_date column to existing databases
+    try {
+      database.execSync('ALTER TABLE timetable_slots ADD COLUMN specific_date TEXT;');
+    } catch {
+      // Column already exists
+    }
+
+    // Seed default categories
     const existingCat = database.getFirstSync('SELECT id FROM session_categories LIMIT 1;');
     if (!existingCat) {
       DEFAULT_CATEGORIES.forEach((c) => {
@@ -448,10 +557,7 @@ if (Platform.OS === 'web') {
 }
 
 export const db: DatabaseDriver = activeDriver;
-
-export function initLocalDatabase() {
-  // Maintained for backward compatibility; setupNativeSQLite already initialized tables safely.
-}
+export function initLocalDatabase() {}
 
 export function queueMutation(table: string, id: string, data: any) {
   const now = Date.now();

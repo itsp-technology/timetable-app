@@ -90,12 +90,6 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       flexWrap: 'wrap',
       gap: 8,
     },
-    headerSubLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      flex: 1,
-    },
     examTag: {
       backgroundColor: theme.primary,
       paddingHorizontal: 8,
@@ -114,54 +108,6 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       color: theme.textSecondary,
       fontSize: 11,
       fontWeight: '600',
-    },
-    userAuthBadge: {
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    userAuthBadgeText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.primary,
-    },
-
-    // --- Merge Local Banner ---
-    mergeBanner: {
-      backgroundColor: 'rgba(59, 130, 246, 0.12)',
-      borderWidth: 1,
-      borderColor: theme.primary,
-      marginHorizontal: 12,
-      marginTop: 8,
-      padding: 10,
-      borderRadius: 10,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    mergeBannerTitle: {
-      fontSize: 12,
-      fontWeight: '800',
-      color: theme.textPrimary,
-    },
-    mergeBannerSub: {
-      fontSize: 10,
-      color: theme.textSecondary,
-      marginTop: 2,
-    },
-    mergeActionBtn: {
-      backgroundColor: theme.primary,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 6,
-    },
-    mergeActionBtnText: {
-      color: theme.primaryText,
-      fontSize: 11,
-      fontWeight: '800',
     },
 
     // --- Metrics Card ---
@@ -204,10 +150,478 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       marginTop: 2,
     },
 
+    // --- 📅 Full Interactive Calendar Styles ---
+    calendarCard: {
+      marginHorizontal: 12,
+      marginTop: 10,
+      borderRadius: 14,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+    },
+    calendarNavRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    calendarNavControls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    calendarMonthArrowBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      backgroundColor: theme.surfaceElevated,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    calendarMonthArrowText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.textPrimary,
+    },
+    calendarMonthLabel: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.textPrimary,
+    },
+    calendarRightActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    calendarViewModeBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      backgroundColor: theme.surfaceElevated,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    calendarViewModeText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.textSecondary,
+    },
+    calendarTodayBtn: {
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 6,
+      backgroundColor: theme.primary,
+    },
+    calendarTodayText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.primaryText,
+    },
+    monthWeekHeadersRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 6,
+      paddingHorizontal: 2,
+    },
+    monthWeekHeaderCol: {
+      width: '14.28%',
+      alignItems: 'center',
+    },
+    monthWeekHeaderText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.textMuted,
+    },
+    monthGridRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+    monthGridCell: {
+      width: '14.28%',
+      height: 38,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginVertical: 1,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: 'transparent',
+    },
+    monthGridCellToday: {
+      borderColor: theme.primary,
+    },
+    monthGridCellSelected: {
+      backgroundColor: theme.primary,
+      borderColor: theme.primary,
+    },
+    monthGridCellText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.textPrimary,
+    },
+    monthGridCellTextSelected: {
+      color: theme.primaryText,
+      fontWeight: '800',
+    },
+    weekStripContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+    weekStripDayCard: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 4,
+      borderRadius: 10,
+      width: 44,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surfaceElevated,
+    },
+    weekStripDayName: {
+      fontSize: 10,
+      color: theme.textMuted,
+      marginBottom: 2,
+      fontWeight: '600',
+    },
+    weekStripDayNum: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.textPrimary,
+    },
+
+    // Daily Schedule Banner
+    dayBannerCard: {
+      marginHorizontal: 12,
+      marginTop: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: theme.surfaceElevated,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    dayBannerBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    dayBannerBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.textPrimary,
+    },
+    dayBannerTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.textPrimary,
+      textAlign: 'center',
+    },
+    dayBannerSub: {
+      fontSize: 10,
+      color: theme.textSecondary,
+      textAlign: 'center',
+    },
+
+    // --- 🗂️ EXPLORER "SORT ⌵" & "VIEW ⌵" TOOLBAR STYLES ---
+    viewToolbarContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginHorizontal: 12,
+      marginTop: 10,
+      marginBottom: 4,
+      paddingHorizontal: 4,
+    },
+    viewToolbarLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    viewDropdownTriggerBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 6,
+      backgroundColor: theme.surfaceElevated,
+      borderWidth: 1,
+      borderColor: theme.border,
+      gap: 5,
+    },
+    viewDropdownTriggerBtnActive: {
+      backgroundColor: theme.surface,
+      borderColor: theme.primary,
+    },
+    viewDropdownTriggerText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.textPrimary,
+    },
+    viewDropdownCaret: {
+      fontSize: 8,
+      color: theme.textSecondary,
+      marginLeft: 2,
+    },
+    viewCountLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.textMuted,
+    },
+
+    // Windows Explorer Dropdown Menu Floating Popover
+    explorerMenuBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+      justifyContent: 'flex-start',
+      paddingTop: 180,
+      paddingHorizontal: 16,
+    },
+    explorerMenuCard: {
+      width: 220,
+      backgroundColor: '#1E2028',
+      borderRadius: 10,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: '#333846',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.35,
+      shadowRadius: 16,
+      elevation: 12,
+    },
+    explorerMenuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 7,
+      paddingHorizontal: 10,
+    },
+    explorerMenuItemHover: {
+      backgroundColor: '#2A2D39',
+    },
+    explorerBulletCol: {
+      width: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 4,
+    },
+    explorerBulletDot: {
+      fontSize: 13,
+      fontWeight: '900',
+      color: '#FFFFFF',
+    },
+    explorerMenuIconCol: {
+      width: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 8,
+    },
+    explorerMenuIcon: {
+      fontSize: 13,
+      color: '#CBD5E1',
+    },
+    explorerMenuLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#E2E8F0',
+      flex: 1,
+    },
+    explorerMenuDivider: {
+      height: 1,
+      backgroundColor: '#333846',
+      marginVertical: 4,
+      marginHorizontal: 8,
+    },
+
+    // --- 🗂️ COMPACT LIST VIEW LAYOUT ---
+    compactSlotRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.surface,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      marginBottom: 6,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderLeftWidth: 4,
+    },
+    compactTimeCol: {
+      width: 65,
+    },
+    compactTimeText: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: theme.textPrimary,
+    },
+    compactSubjectCol: {
+      flex: 1,
+      marginLeft: 6,
+    },
+    compactSubjectTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.textPrimary,
+    },
+    compactTopicText: {
+      fontSize: 9,
+      color: theme.textSecondary,
+    },
+
+    // --- ⊞ TILES / GRID VIEW LAYOUT ---
+    gridStreamRow: {
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    gridSlotCard: {
+      flex: 1,
+      backgroundColor: theme.surface,
+      borderRadius: 10,
+      padding: 10,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderTopWidth: 3,
+    },
+    gridHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    gridTimeText: {
+      fontSize: 9,
+      fontWeight: '700',
+      color: theme.textSecondary,
+    },
+    gridSubjectText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.textPrimary,
+      marginBottom: 2,
+    },
+
+    // --- ⚡ Spaced Repetition Active Recall Cards ---
+    recallDueCard: {
+      marginHorizontal: 12,
+      marginTop: 8,
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: '#7E22CE',
+      backgroundColor: '#3B0764',
+    },
+    recallDueHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    recallDueTitle: {
+      color: '#F0ABFC',
+      fontWeight: '800',
+      fontSize: 11,
+      letterSpacing: 0.5,
+    },
+    recallDueCount: {
+      color: '#E879F9',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    recallDueRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.28)',
+      borderRadius: 8,
+      padding: 8,
+      marginTop: 6,
+    },
+    recallCheckbox: {
+      width: 20,
+      height: 20,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      borderColor: '#E879F9',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    recallCheckboxChecked: {
+      backgroundColor: '#A855F7',
+      borderColor: '#A855F7',
+    },
+    recallCheckmark: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    recallTopicText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#FAF5FF',
+    },
+    recallTopicDone: {
+      textDecorationLine: 'line-through',
+      color: '#D8B4FE',
+    },
+    recallMetaText: {
+      fontSize: 10,
+      color: '#D8B4FE',
+      marginTop: 2,
+    },
+    recallPreviewBox: {
+      padding: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surfaceElevated,
+      gap: 6,
+    },
+    recallPreviewRow: {
+      fontSize: 12,
+      lineHeight: 18,
+      color: theme.textPrimary,
+    },
+
+    // --- Frequency Selector in Modal ---
+    frequencyToggleRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginVertical: 4,
+    },
+    frequencyPill: {
+      flex: 1,
+      paddingVertical: 7,
+      paddingHorizontal: 8,
+      borderRadius: 7,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surfaceElevated,
+      alignItems: 'center',
+    },
+    frequencyPillActive: {
+      backgroundColor: theme.primary,
+      borderColor: theme.primary,
+    },
+    frequencyPillText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.textSecondary,
+    },
+    frequencyPillTextActive: {
+      color: theme.primaryText,
+      fontWeight: '800',
+    },
+
     // --- Categories Tracker ---
     categoryTrackerSection: {
       marginHorizontal: 12,
-      marginTop: 12,
+      marginTop: 10,
       marginBottom: 2,
     },
     categoryTrackerHeader: {
@@ -281,49 +695,6 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       color: '#EF4444',
     },
 
-    // --- Day Selector ---
-    daySelectorWrapper: {
-      backgroundColor: theme.surface,
-      marginTop: 8,
-      borderBottomWidth: 1,
-      borderColor: theme.border,
-    },
-    dayScrollContent: {
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-      gap: 5,
-    },
-    dayTab: {
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 7,
-      backgroundColor: theme.tabBg,
-      alignItems: 'center',
-      minWidth: 52,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    dayTabActive: {
-      backgroundColor: theme.tabActiveBg,
-      borderColor: theme.tabActiveBg,
-    },
-    dayTabShort: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.tabText,
-    },
-    dayTabShortActive: {
-      color: theme.tabActiveText,
-    },
-    dayTabFull: {
-      fontSize: 8,
-      color: theme.textMuted,
-      marginTop: 1,
-    },
-    dayTabFullActive: {
-      color: theme.tabActiveText,
-    },
-
     // --- Timetable Slots Stream ---
     streamContent: {
       padding: 12,
@@ -355,7 +726,7 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       fontSize: 11,
       color: theme.textSecondary,
       textAlign: 'center',
-      maxWidth: 260,
+      maxWidth: 280,
       lineHeight: 16,
     },
     slotCard: {
@@ -831,33 +1202,6 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
       color: theme.textPrimary,
     },
 
-    // --- Authentication Modal Styles ---
-    authTabRow: {
-      flexDirection: 'row',
-      borderRadius: 8,
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-      marginBottom: 12,
-      overflow: 'hidden',
-    },
-    authTab: {
-      flex: 1,
-      paddingVertical: 8,
-      alignItems: 'center',
-    },
-    authTabActive: {
-      backgroundColor: theme.primary,
-    },
-    authTabText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.textSecondary,
-    },
-    authTabTextActive: {
-      color: theme.primaryText,
-    },
-
     // --- Notifications Center ---
     notifToggleCard: {
       flexDirection: 'row',
@@ -919,42 +1263,6 @@ export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
     },
     notifLeadPillTextActive: {
       color: theme.primaryText,
-    },
-    notifQueueList: {
-      maxHeight: 180,
-      marginVertical: 6,
-      backgroundColor: theme.surfaceElevated,
-      borderRadius: 8,
-      padding: 6,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    notifQueueItem: {
-      padding: 8,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
-    },
-    notifQueueTop: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 2,
-    },
-    notifQueueTime: {
-      fontSize: 10,
-      fontWeight: '800',
-      color: theme.primary,
-    },
-    notifQueueType: {
-      fontSize: 9,
-      fontWeight: '700',
-      color: theme.textSecondary,
-      textTransform: 'uppercase',
-    },
-    notifQueueMsg: {
-      fontSize: 10,
-      color: theme.textPrimary,
-      lineHeight: 14,
     },
     testAlarmBtn: {
       backgroundColor: theme.surfaceElevated,
