@@ -9,23 +9,28 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
+      "backgroundColor": "#0B172E"
     },
     "android": {
       "package": "com.timetable.examplanner",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0F172A"
+        "backgroundColor": "#0B172E"
       },
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE"
       ]
     },
-    "extra": {
-      "eas": {
-        "projectId": "2c07d8b0-f661-4eb0-88c3-dd832522de1b"
-      }
-    }
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
+      ]
+    ]
   }
 }
