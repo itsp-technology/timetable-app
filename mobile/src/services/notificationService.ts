@@ -4,14 +4,52 @@ import { Platform } from 'react-native';
 export interface ScheduledAlert {
   id: string;
   slotId: string;
-  triggerMinutes: number; // minutes from midnight
+  triggerMinutes: number;
   displayTime: string;
   subjectName: string;
   type: 'pre_session' | 'post_session';
   message: string;
 }
 
-// 1. Synthetic Audio Chime (Zero external assets needed)
+const ANDROID_CHANNEL_ID = 'study-alerts-channel';
+
+let NotificationsModule: any = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    NotificationsModule = require('expo-notifications');
+    if (NotificationsModule && NotificationsModule.setNotificationHandler) {
+      NotificationsModule.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
+    }
+  } catch (e) {
+    console.warn('Notifications native module unavailable:', e);
+  }
+}
+
+export async function setupMobileNotificationChannel() {
+  if (Platform.OS === 'android' && NotificationsModule?.setNotificationChannelAsync) {
+    try {
+      await NotificationsModule.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+        name: 'Study Alarms & Session Reminders',
+        importance: NotificationsModule.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#2563EB',
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
+      });
+    } catch (e) {
+      console.warn('Channel creation error:', e);
+    }
+  }
+}
+
 export function playNotificationChime() {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     try {
@@ -19,13 +57,12 @@ export function playNotificationChime() {
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
 
-      // Dual-tone harmonic chime (D5 -> A5)
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12); // A5
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
 
       gain.gain.setValueAtTime(0.25, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
@@ -35,44 +72,99 @@ export function playNotificationChime() {
 
       osc.start();
       osc.stop(ctx.currentTime + 0.45);
-    } catch {
-      // Audio context restricted until user interacts
-    }
+    } catch {}
   }
 }
 
-// 2. Request System Notifications
 export async function requestSystemNotificationPermission(): Promise<boolean> {
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
-    if (Notification.permission === 'granted') return true;
-    if (Notification.permission !== 'denied') {
-      const permission = await Notification.requestPermission();
-      return permission === 'granted';
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') return true;
+      if (Notification.permission !== 'denied') {
+        const p = await Notification.requestPermission();
+        return p === 'granted';
+      }
     }
     return false;
+  } else {
+    if (!NotificationsModule) return false;
+    try {
+      await setupMobileNotificationChannel();
+      const settings = await NotificationsModule.getPermissionsAsync();
+      if (settings.granted || settings.ios?.status === NotificationsModule.IosAuthorizationStatus.PROVISIONAL) {
+        return true;
+      }
+      const request = await NotificationsModule.requestPermissionsAsync({
+        ios: { allowAlert: true, allowBadge: true, allowSound: true },
+        android: {},
+      });
+      return request.granted;
+    } catch {
+      return false;
+    }
   }
-  return true;
 }
 
-// 3. Dispatch Live Notification
-export function dispatchNotification(title: string, body: string) {
-  playNotificationChime();
-
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
-    if (Notification.permission === 'granted') {
+export async function dispatchNotification(title: string, body: string) {
+  if (Platform.OS === 'web') {
+    playNotificationChime();
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification(title, {
-          body,
-          icon: 'https://cdn-icons-png.flaticon.com/512/3233/3233497.png',
+        new Notification(title, { body });
+      } catch {}
+    }
+  } else {
+    if (NotificationsModule?.scheduleNotificationAsync) {
+      try {
+        await NotificationsModule.scheduleNotificationAsync({
+          content: {
+            title,
+            body,
+            sound: 'default',
+            vibrate: [0, 250, 250, 250],
+            channelId: ANDROID_CHANNEL_ID,
+          },
+          trigger: null,
         });
       } catch (e) {
-        console.warn('System notification failed:', e);
+        console.warn('Native notification failed:', e);
       }
     }
   }
 }
 
-// 4. Calculate Scheduled Alerts for the Active Day
+export async function scheduleNativeAlarmsForToday(alerts: ScheduledAlert[]) {
+  if (Platform.OS === 'web' || !NotificationsModule?.scheduleNotificationAsync) return;
+
+  try {
+    await NotificationsModule.cancelAllScheduledNotificationsAsync();
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    for (const alert of alerts) {
+      if (alert.triggerMinutes > currentMinutes) {
+        const delaySeconds = (alert.triggerMinutes - currentMinutes) * 60 - now.getSeconds();
+        if (delaySeconds > 0) {
+          await NotificationsModule.scheduleNotificationAsync({
+            content: {
+              title: alert.type === 'pre_session' ? `🔔 Upcoming: ${alert.subjectName}` : '🎯 Accountability Check',
+              body: alert.message,
+              sound: 'default',
+              channelId: ANDROID_CHANNEL_ID,
+            },
+            trigger: {
+              type: NotificationsModule.SchedulableTriggerInputTypes.TIME_INTERVAL,
+              seconds: delaySeconds,
+            },
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Schedule alarms error:', e);
+  }
+}
+
 export function calculateDayAlerts(
   slots: any[],
   leadMinutes: number,
@@ -81,7 +173,6 @@ export function calculateDayAlerts(
   const alerts: ScheduledAlert[] = [];
 
   slots.forEach((s) => {
-    // A. Pre-session Lead-time Warning
     const preTrigger = Math.max(0, s.start_time_minutes - leadMinutes);
     const preH = Math.floor(preTrigger / 60);
     const preM = preTrigger % 60;
@@ -101,7 +192,6 @@ export function calculateDayAlerts(
       message: `${leadMinutes > 0 ? `Starts in ${leadMinutes}m: ` : 'Starting now: '}${s.subject_name}. ${topicSnippet} (${goalSnippet})`,
     });
 
-    // B. Post-session Accountability Wrap-up
     if (enablePostSession) {
       const postTrigger = s.end_time_minutes;
       const postH = Math.floor(postTrigger / 60);
@@ -116,7 +206,7 @@ export function calculateDayAlerts(
         displayTime: `${postH12.toString().padStart(2, '0')}:${postM.toString().padStart(2, '0')} ${postPeriod}`,
         subjectName: s.subject_name,
         type: 'post_session',
-        message: `Session complete: ${s.subject_name}! Did you achieve your goal? Log your status to track your efficiency score.`,
+        message: `Session complete: ${s.subject_name}! Did you achieve your goal? Log your progress.`,
       });
     }
   });

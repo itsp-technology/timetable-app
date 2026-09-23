@@ -19,7 +19,9 @@
       },
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "VIBRATE",
+        "POST_NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM"
       ]
     },
     "plugins": [
@@ -27,15 +29,14 @@
         "expo-build-properties",
         {
           "android": {
-            "kotlinVersion": "1.9.25"
+            "kotlinVersion": "1.9.25",
+            "buildArchs": ["arm64-v8a", "armeabi-v7a"],
+            "enableMinifyInReleaseBuilds": false,
+            "enableShrinkResourcesInReleaseBuilds": false,
+            "useLegacyPackaging": true
           }
         }
       ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "2c07d8b0-f661-4eb0-88c3-dd832522de1b"
-      }
-    }
+    ]
   }
 }

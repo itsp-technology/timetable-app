@@ -43,7 +43,7 @@ export interface WebDBState {
   meta: Record<string, string>;
 }
 
-const STORAGE_KEY = 'exam_timetable_v6_stable';
+const STORAGE_KEY = 'exam_timetable_v7_stable';
 
 function loadWebState(): WebDBState {
   if (typeof window !== 'undefined') {
@@ -104,19 +104,14 @@ export function getGuestSnapshot(): GuestSnapshot {
       attendance: raw.attendance.filter((a) => a.user_id === GUEST_USER_ID && !a.is_deleted),
     };
   } else {
-    const slots = db.getAllSync(
-      'SELECT * FROM timetable_slots WHERE user_id = ? AND is_deleted = 0;',
-      [GUEST_USER_ID]
-    );
-    const subjects = db.getAllSync(
-      'SELECT * FROM subjects WHERE user_id = ? AND is_deleted = 0;',
-      [GUEST_USER_ID]
-    );
-    const attendance = db.getAllSync(
-      'SELECT * FROM attendance_records WHERE user_id = ? AND is_deleted = 0;',
-      [GUEST_USER_ID]
-    );
-    return { slots, subjects, attendance };
+    try {
+      const slots = db.getAllSync('SELECT * FROM timetable_slots WHERE user_id = ? AND is_deleted = 0;', [GUEST_USER_ID]);
+      const subjects = db.getAllSync('SELECT * FROM subjects WHERE user_id = ? AND is_deleted = 0;', [GUEST_USER_ID]);
+      const attendance = db.getAllSync('SELECT * FROM attendance_records WHERE user_id = ? AND is_deleted = 0;', [GUEST_USER_ID]);
+      return { slots, subjects, attendance };
+    } catch {
+      return { slots: [], subjects: [], attendance: [] };
+    }
   }
 }
 
@@ -141,19 +136,24 @@ export function transferGuestDataToUser(targetUserId: string): { slotsCount: num
     persistWebState();
   } else {
     const now = Date.now();
-    const guestRows = db.getAllSync('SELECT id FROM timetable_slots WHERE user_id = ? AND is_deleted = 0;', [GUEST_USER_ID]);
-    moved = guestRows.length;
+    try {
+      const guestRows = db.getAllSync('SELECT id FROM timetable_slots WHERE user_id = ? AND is_deleted = 0;', [GUEST_USER_ID]);
+      moved = guestRows.length;
 
-    db.withTransactionSync(() => {
-      db.runSync('UPDATE timetable_slots SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
-      db.runSync('UPDATE subjects SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
-      db.runSync('UPDATE attendance_records SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
-    });
+      db.withTransactionSync(() => {
+        db.runSync('UPDATE timetable_slots SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
+        db.runSync('UPDATE subjects SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
+        db.runSync('UPDATE attendance_records SET user_id = ?, updated_at = ? WHERE user_id = ?;', [targetUserId, now, GUEST_USER_ID]);
+      });
+    } catch (e) {
+      console.warn('Native transfer failed:', e);
+    }
   }
 
   return { slotsCount: moved };
 }
 
+// 1. Web Database Driver
 const webDbDriver: DatabaseDriver = {
   getAllSync<T = any>(query: string, params: any[] = []): T[] {
     if (query.includes('FROM session_categories')) {
@@ -193,7 +193,6 @@ const webDbDriver: DatabaseDriver = {
   },
 
   getFirstSync<T = any>(query: string, params: any[] = []): T | null {
-    // Check local user existence (Username or Email)
     if (query.includes('FROM users')) {
       const p1 = (params[0] || '').toLowerCase().trim();
       const p2 = (params[1] || params[0] || '').toLowerCase().trim();
@@ -289,7 +288,6 @@ const webDbDriver: DatabaseDriver = {
       const [key, value] = params;
       webData.meta[key] = value;
     } else if (query.includes('DELETE FROM sync_meta')) {
-      // FIX 1: Explicitly handle DELETE FROM sync_meta so session key is destroyed on logout!
       const [key] = params;
       delete webData.meta[key];
     }
@@ -313,19 +311,10 @@ const webDbDriver: DatabaseDriver = {
   },
 };
 
-let activeDriver: DatabaseDriver;
-if (Platform.OS === 'web') {
-  activeDriver = webDbDriver;
-} else {
-  const SQLite = require('expo-sqlite');
-  activeDriver = SQLite.openDatabaseSync('clean_exam_timetable_v6.db');
-}
-
-export const db: DatabaseDriver = activeDriver;
-
-export function initLocalDatabase() {
-  if (Platform.OS !== 'web') {
-    db.execSync(`
+// 2. Native SQLite Setup: Auto-create tables IMMEDIATELY so app never crashes
+function setupNativeSQLite(database: any): DatabaseDriver {
+  try {
+    database.execSync(`
       PRAGMA foreign_keys = ON;
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -388,7 +377,80 @@ export function initLocalDatabase() {
         value TEXT
       );
     `);
+
+    // Seed default categories into native SQLite if empty
+    const existingCat = database.getFirstSync('SELECT id FROM session_categories LIMIT 1;');
+    if (!existingCat) {
+      DEFAULT_CATEGORIES.forEach((c) => {
+        database.runSync(
+          'INSERT OR IGNORE INTO session_categories (id, name, icon, color_hex, bg_hex, is_custom) VALUES (?, ?, ?, ?, ?, ?);',
+          [c.id, c.name, c.icon, c.color_hex, c.bg_hex, 0]
+        );
+      });
+    }
+  } catch (err) {
+    console.warn('Native SQLite schema setup warning:', err);
   }
+
+  return {
+    getAllSync: <T = any>(query: string, params: any[] = []): T[] => {
+      try {
+        return database.getAllSync(query, params) as T[];
+      } catch (e) {
+        console.warn('getAllSync error:', e);
+        return [];
+      }
+    },
+    getFirstSync: <T = any>(query: string, params: any[] = []): T | null => {
+      try {
+        return database.getFirstSync(query, params) as T | null;
+      } catch (e) {
+        console.warn('getFirstSync error:', e);
+        return null;
+      }
+    },
+    runSync: (query: string, params: any[] = []): void => {
+      try {
+        database.runSync(query, params);
+      } catch (e) {
+        console.warn('runSync error:', e);
+      }
+    },
+    execSync: (query: string): void => {
+      try {
+        database.execSync(query);
+      } catch (e) {
+        console.warn('execSync error:', e);
+      }
+    },
+    withTransactionSync: (callback: () => void): void => {
+      try {
+        database.withTransactionSync(callback);
+      } catch {
+        callback();
+      }
+    },
+  };
+}
+
+let activeDriver: DatabaseDriver;
+if (Platform.OS === 'web') {
+  activeDriver = webDbDriver;
+} else {
+  try {
+    const SQLite = require('expo-sqlite');
+    const rawDb = SQLite.openDatabaseSync('clean_exam_timetable_v7.db');
+    activeDriver = setupNativeSQLite(rawDb);
+  } catch (e) {
+    console.warn('Failed to load expo-sqlite, using memory driver fallback:', e);
+    activeDriver = webDbDriver;
+  }
+}
+
+export const db: DatabaseDriver = activeDriver;
+
+export function initLocalDatabase() {
+  // Maintained for backward compatibility; setupNativeSQLite already initialized tables safely.
 }
 
 export function queueMutation(table: string, id: string, data: any) {

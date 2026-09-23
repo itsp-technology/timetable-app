@@ -24,22 +24,28 @@ class AuthService {
   private token: string | null = null;
 
   constructor() {
-    this.loadPersistedAuth();
+    try {
+      this.loadPersistedAuth();
+    } catch (e) {
+      console.warn('AuthService init fallback:', e);
+      this.currentUser = null;
+      this.token = null;
+    }
   }
 
   public loadPersistedAuth(): AuthUser | null {
-    const userRow = db.getFirstSync<{ value: string }>('SELECT value FROM sync_meta WHERE key = ?', [AUTH_USER_KEY]);
-    const tokenRow = db.getFirstSync<{ value: string }>('SELECT value FROM sync_meta WHERE key = ?', [AUTH_TOKEN_KEY]);
+    try {
+      const userRow = db.getFirstSync<{ value: string }>('SELECT value FROM sync_meta WHERE key = ?', [AUTH_USER_KEY]);
+      const tokenRow = db.getFirstSync<{ value: string }>('SELECT value FROM sync_meta WHERE key = ?', [AUTH_TOKEN_KEY]);
 
-    if (userRow?.value) {
-      try {
+      if (userRow?.value) {
         this.currentUser = JSON.parse(userRow.value);
         this.token = tokenRow?.value || null;
-      } catch {
+      } else {
         this.currentUser = null;
         this.token = null;
       }
-    } else {
+    } catch {
       this.currentUser = null;
       this.token = null;
     }
@@ -62,7 +68,7 @@ class AuthService {
     return this.currentUser?.id || GUEST_USER_ID;
   }
 
-  // 1. Register with Strict Pre-flight Duplicate Checks
+  // 1. Register with duplicate prevention
   public async register(email: string, username: string, password: string, name: string): Promise<AuthResponse> {
     const cleanEmail = email.toLowerCase().trim();
     const cleanUsername = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
@@ -75,20 +81,22 @@ class AuthService {
       return { success: false, error: 'Username must be at least 3 characters long.' };
     }
 
-    // Step A: Local database duplicate pre-check
-    const localExisting = db.getFirstSync<{ id: string; username: string; email: string }>(
-      'SELECT id, username, email FROM users WHERE username = ? OR email = ?',
-      [cleanUsername, cleanEmail]
-    );
+    try {
+      const localExisting = db.getFirstSync<{ id: string; username: string; email: string }>(
+        'SELECT id, username, email FROM users WHERE username = ? OR email = ?',
+        [cleanUsername, cleanEmail]
+      );
 
-    if (localExisting) {
-      if (localExisting.username?.toLowerCase() === cleanUsername) {
-        return { success: false, error: `Username @${cleanUsername} is already registered. Please choose another.` };
+      if (localExisting) {
+        if (localExisting.username?.toLowerCase() === cleanUsername) {
+          return { success: false, error: `Username @${cleanUsername} is already taken.` };
+        }
+        return { success: false, error: `An account with email ${cleanEmail} already exists.` };
       }
-      return { success: false, error: `An account with email ${cleanEmail} already exists. Please log in.` };
+    } catch {
+      // Table check fallback
     }
 
-    // Step B: Remote Cloudflare API registration
     try {
       const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
@@ -101,7 +109,6 @@ class AuthService {
         return { success: false, error: data.error || 'Registration failed.' };
       }
 
-      // Record in local user registry
       db.runSync(
         'INSERT INTO users (id, username, email, name, created_at) VALUES (?, ?, ?, ?, ?)',
         [data.user.id, data.user.username, data.user.email, data.user.name, Date.now()]
@@ -110,7 +117,7 @@ class AuthService {
       this.saveSession(data.user, data.token);
       return { success: true, user: data.user, token: data.token };
     } catch {
-      // Step C: Offline development fallback with guaranteed local unique persistence
+      // Offline fallback
       const mockUser: AuthUser = {
         id: 'usr_' + Math.random().toString(36).substring(2, 10),
         username: cleanUsername,
@@ -128,7 +135,7 @@ class AuthService {
     }
   }
 
-  // 2. Login with Username OR Email
+  // 2. Login
   public async login(identifier: string, password: string): Promise<AuthResponse> {
     const cleanId = identifier.toLowerCase().trim();
     if (!cleanId || !password) {
@@ -147,7 +154,6 @@ class AuthService {
         return { success: false, error: data.error || 'Invalid credentials.' };
       }
 
-      // Save user to local registry
       db.runSync(
         'INSERT INTO users (id, username, email, name, created_at) VALUES (?, ?, ?, ?, ?)',
         [data.user.id, data.user.username, data.user.email, data.user.name, Date.now()]
@@ -156,46 +162,51 @@ class AuthService {
       this.saveSession(data.user, data.token);
       return { success: true, user: data.user, token: data.token };
     } catch {
-      // Local fallback lookup
-      const localUser = db.getFirstSync<{ id: string; username: string; email: string; name: string }>(
-        'SELECT id, username, email, name FROM users WHERE username = ? OR email = ?',
-        [cleanId, cleanId]
-      );
+      try {
+        const localUser = db.getFirstSync<{ id: string; username: string; email: string; name: string }>(
+          'SELECT id, username, email, name FROM users WHERE username = ? OR email = ?',
+          [cleanId, cleanId]
+        );
 
-      if (localUser) {
-        const userObj: AuthUser = {
-          id: localUser.id,
-          username: localUser.username,
-          email: localUser.email,
-          name: localUser.name || localUser.username,
-        };
-        this.saveSession(userObj, 'local_dev_token');
-        return { success: true, user: userObj, token: 'local_dev_token' };
-      }
+        if (localUser) {
+          const userObj: AuthUser = {
+            id: localUser.id,
+            username: localUser.username,
+            email: localUser.email,
+            name: localUser.name || localUser.username,
+          };
+          this.saveSession(userObj, 'local_dev_token');
+          return { success: true, user: userObj, token: 'local_dev_token' };
+        }
+      } catch {}
 
       return { success: false, error: `Account "${cleanId}" not found. Please register first.` };
     }
   }
 
-  // 3. Complete Logout (Destroys memory and SQLite/Web session keys)
+  // 3. Logout
   public logout(): void {
     this.currentUser = null;
     this.token = null;
-    db.runSync('DELETE FROM sync_meta WHERE key = ?;', [AUTH_USER_KEY]);
-    db.runSync('DELETE FROM sync_meta WHERE key = ?;', [AUTH_TOKEN_KEY]);
+    try {
+      db.runSync('DELETE FROM sync_meta WHERE key = ?;', [AUTH_USER_KEY]);
+      db.runSync('DELETE FROM sync_meta WHERE key = ?;', [AUTH_TOKEN_KEY]);
+    } catch {}
   }
 
   private saveSession(user: AuthUser, token: string) {
     this.currentUser = user;
     this.token = token;
-    db.runSync(
-      `INSERT INTO sync_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
-      [AUTH_USER_KEY, JSON.stringify(user)]
-    );
-    db.runSync(
-      `INSERT INTO sync_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
-      [AUTH_TOKEN_KEY, token]
-    );
+    try {
+      db.runSync(
+        `INSERT INTO sync_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+        [AUTH_USER_KEY, JSON.stringify(user)]
+      );
+      db.runSync(
+        `INSERT INTO sync_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+        [AUTH_TOKEN_KEY, token]
+      );
+    } catch {}
   }
 }
 
