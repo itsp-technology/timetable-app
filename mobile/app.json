@@ -1,15 +1,31 @@
 {
   "expo": {
-    "name": "timetable-mobile",
+    "name": "Student Timetable",
     "slug": "timetable-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
     },
     "android": {
-      "package": "com.timetable.mobile"
+      "package": "com.timetable.examplanner",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F172A"
+      },
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2c07d8b0-f661-4eb0-88c3-dd832522de1b"
+      }
     }
   }
 }
