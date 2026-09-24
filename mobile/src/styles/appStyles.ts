@@ -3,1348 +3,632 @@ import { StyleSheet, Platform } from 'react-native';
 import { ThemeColors } from '../theme/themes';
 
 export function getAppStyles(theme: ThemeColors, isDesktop: boolean) {
+  const isLight = theme.bg === '#F8FAFC' || theme.bg === '#FFFFFF';
+  const sidebarBg = isLight ? '#F1F5F9' : '#0B0F19';
+  const canvasBg = theme.bg;
+  const brandBlue = '#2563EB';
+
   return StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor: theme.bg,
-      width: '100%',
+      backgroundColor: sidebarBg,
     },
-    mainLayout: {
+    rootContainer: {
       flex: 1,
-      backgroundColor: theme.bg,
+      flexDirection: isDesktop ? 'row' : 'column',
+      backgroundColor: canvasBg,
       width: '100%',
-      maxWidth: '100%',
-      overflow: 'hidden',
       ...(Platform.OS === 'web' ? ({ height: '100vh', maxHeight: '100vh' } as any) : {}),
     },
-    desktopLayout: {
-      maxWidth: 960,
-      width: '100%',
-      marginHorizontal: 'auto' as any,
-      borderLeftWidth: 1,
-      borderRightWidth: 1,
+
+    // ==========================================
+    // 1. SIDEBAR (Navigation Drawer)
+    // ==========================================
+    sidebar: {
+      width: isDesktop ? 220 : '100%',
+      backgroundColor: sidebarBg,
+      borderRightWidth: isDesktop ? 1 : 0,
+      borderBottomWidth: isDesktop ? 0 : 1,
       borderColor: theme.border,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.15,
-      shadowRadius: 16,
-    },
-    topHeader: {
-      backgroundColor: theme.headerBg,
       paddingHorizontal: 14,
-      paddingTop: 12,
+      paddingTop: 16,
       paddingBottom: 14,
+      justifyContent: 'space-between',
+    },
+    sidebarLogoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+    },
+    sidebarLogoText: {
+      fontSize: 18,
+      fontWeight: '900',
+      color: brandBlue,
+      letterSpacing: -0.5,
+    },
+    sidebarSectionTitle: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      marginTop: 12,
+      marginBottom: 4,
+      paddingHorizontal: 6,
+    },
+    sidebarNavItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      marginVertical: 1,
+      gap: 10,
+    },
+    sidebarNavItemActive: {
+      backgroundColor: isLight ? '#E0F2FE' : 'rgba(37, 99, 235, 0.2)',
+      borderLeftWidth: 3,
+      borderLeftColor: brandBlue,
+    },
+    sidebarNavIcon: {
+      fontSize: 15,
+      color: theme.textSecondary,
+    },
+    sidebarNavIconActive: {
+      color: brandBlue,
+    },
+    sidebarNavLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.textPrimary,
+    },
+    sidebarNavLabelActive: {
+      color: brandBlue,
+      fontWeight: '800',
+    },
+    sidebarAddBtn: {
+      backgroundColor: brandBlue,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 9,
+      paddingHorizontal: 14,
+      borderRadius: 20,
+      marginTop: 14,
+      gap: 6,
+      elevation: 2,
+    },
+    sidebarAddBtnText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    sidebarFooter: {
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+      gap: 8,
+    },
+    sidebarToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 6,
+    },
+    sidebarToggleLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.textSecondary,
+    },
+
+    // ==========================================
+    // 2. MAIN CONTENT AREA & TOOLBAR
+    // ==========================================
+    mainContent: {
+      flex: 1,
+      backgroundColor: canvasBg,
+      overflow: 'hidden',
+    },
+    topToolbar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
-      width: '100%',
-    },
-    headerTopRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      width: '100%',
-      marginBottom: 8,
-    },
-    titleContainer: {
-      flex: 1,
-      marginRight: 6,
-    },
-    portalTitle: {
-      color: theme.headerText,
-      fontSize: 18,
-      fontWeight: '800',
-    },
-    headerRightGroup: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-    },
-    headerButton: {
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-      paddingHorizontal: 8,
-      paddingVertical: 5,
-      borderRadius: 7,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    headerButtonText: {
-      color: theme.textPrimary,
-      fontSize: 11,
-      fontWeight: '600',
-    },
-    notifStatusDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: '#10B981',
-      marginLeft: 2,
-    },
-    headerSubRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      width: '100%',
+      backgroundColor: canvasBg,
       flexWrap: 'wrap',
       gap: 8,
     },
-    examTag: {
-      backgroundColor: theme.primary,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 6,
-      maxWidth: '65%',
-    },
-    examTagText: {
-      color: theme.primaryText,
-      fontWeight: '800',
-      fontSize: 10,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    countdownText: {
-      color: theme.textSecondary,
-      fontSize: 11,
-      fontWeight: '600',
-    },
-
-    // --- Metrics Card ---
-    metricsContainer: {
-      backgroundColor: theme.metricsBg,
-      marginHorizontal: 12,
-      marginTop: 10,
-      borderRadius: 12,
-      paddingVertical: 10,
-      paddingHorizontal: 8,
+    dateNavigatorPill: {
       flexDirection: 'row',
-      justifyContent: 'space-around',
+      alignItems: 'center',
+      backgroundColor: isLight ? '#F1F5F9' : theme.surfaceElevated,
+      borderRadius: 20,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
       borderWidth: 1,
       borderColor: theme.border,
+    },
+    dateNavArrowBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    dateNavArrowText: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: brandBlue,
+    },
+    dateNavTitleText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.textPrimary,
+      paddingHorizontal: 6,
+    },
+    viewControlsGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    todayPillBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: brandBlue,
+      backgroundColor: isLight ? '#FFFFFF' : 'transparent',
+    },
+    todayPillBtnText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: brandBlue,
+    },
+
+    // ==========================================
+    // 3. SMART TIMETABLE RAINBOW CARDS (image_72eafe.png)
+    // ==========================================
+    smartTimelineList: {
+      flex: 1,
+      padding: 14,
+    },
+    smartClassCard: {
+      borderRadius: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      marginBottom: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
       elevation: 2,
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.08,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
       shadowRadius: 4,
     },
-    metricBox: {
+    smartClassIndexCol: {
+      width: 24,
       alignItems: 'center',
-      flex: 1,
+      justifyContent: 'center',
     },
-    metricDivider: {
-      width: 1,
-      height: '75%',
-      backgroundColor: theme.border,
-      alignSelf: 'center',
-    },
-    metricVal: {
-      fontSize: 14,
+    smartClassIndexText: {
+      fontSize: 16,
       fontWeight: '800',
-      color: theme.textPrimary,
+      opacity: 0.95,
     },
-    metricLabel: {
-      fontSize: 10,
-      color: theme.textSecondary,
+    smartClassTimeCol: {
+      width: 55,
+      marginLeft: 4,
+    },
+    smartClassTimeText: {
+      fontSize: 11,
+      fontWeight: '700',
+      opacity: 0.95,
+      lineHeight: 14,
+    },
+    smartClassContentCol: {
+      flex: 1,
+      marginLeft: 10,
+    },
+    smartClassTitleText: {
+      fontSize: 15,
+      fontWeight: '900',
+      letterSpacing: -0.2,
+    },
+    smartClassSubtitleText: {
+      fontSize: 11,
       fontWeight: '600',
+      opacity: 0.85,
       marginTop: 2,
     },
-
-    // --- 📅 Full Interactive Calendar Styles ---
-    calendarCard: {
-      marginHorizontal: 12,
-      marginTop: 10,
+    smartBadgePill: {
+      backgroundColor: 'rgba(255, 255, 255, 0.28)',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
       borderRadius: 14,
-      padding: 12,
       borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.surface,
+      borderColor: 'rgba(255, 255, 255, 0.4)',
     },
-    calendarNavRow: {
+    smartBadgeText: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+
+    // ==========================================
+    // 4. TIMETABLE GENERATOR APP GRID (image_728c49.png)
+    // ==========================================
+    generatorRoot: {
+      flex: 1,
+      padding: 16,
+      backgroundColor: isLight ? '#F8FAFC' : '#0B0F19',
+    },
+    generatorTopRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 10,
+      flexWrap: 'wrap',
+      gap: 10,
+      marginBottom: 6,
     },
-    calendarNavControls: {
+    generatorTitleInput: {
+      backgroundColor: isLight ? '#FFFFFF' : '#141A29',
+      color: theme.textPrimary,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 6,
+      fontSize: 14,
+      fontWeight: '800',
+      borderWidth: 1,
+      borderColor: theme.border,
+      minWidth: 180,
+    },
+    generatorActionsGroup: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-    },
-    calendarMonthArrowBtn: {
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    calendarMonthArrowText: {
-      fontSize: 12,
-      fontWeight: '800',
-      color: theme.textPrimary,
-    },
-    calendarMonthLabel: {
-      fontSize: 14,
-      fontWeight: '800',
-      color: theme.textPrimary,
-    },
-    calendarRightActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    calendarViewModeBtn: {
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    calendarViewModeText: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: theme.textSecondary,
-    },
-    calendarTodayBtn: {
-      paddingHorizontal: 9,
-      paddingVertical: 4,
-      borderRadius: 6,
-      backgroundColor: theme.primary,
-    },
-    calendarTodayText: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: theme.primaryText,
-    },
-    monthWeekHeadersRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 6,
-      paddingHorizontal: 2,
-    },
-    monthWeekHeaderCol: {
-      width: '14.28%',
-      alignItems: 'center',
-    },
-    monthWeekHeaderText: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: theme.textMuted,
-    },
-    monthGridRow: {
-      flexDirection: 'row',
       flexWrap: 'wrap',
     },
-    monthGridCell: {
-      width: '14.28%',
-      height: 38,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginVertical: 1,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: 'transparent',
-    },
-    monthGridCellToday: {
-      borderColor: theme.primary,
-    },
-    monthGridCellSelected: {
-      backgroundColor: theme.primary,
-      borderColor: theme.primary,
-    },
-    monthGridCellText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.textPrimary,
-    },
-    monthGridCellTextSelected: {
-      color: theme.primaryText,
-      fontWeight: '800',
-    },
-    weekStripContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-    },
-    weekStripDayCard: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 8,
-      paddingHorizontal: 4,
-      borderRadius: 10,
-      width: 44,
+    genBtnDark: {
+      backgroundColor: isLight ? '#FFFFFF' : '#182030',
       borderWidth: 1,
       borderColor: theme.border,
-      backgroundColor: theme.surfaceElevated,
-    },
-    weekStripDayName: {
-      fontSize: 10,
-      color: theme.textMuted,
-      marginBottom: 2,
-      fontWeight: '600',
-    },
-    weekStripDayNum: {
-      fontSize: 14,
-      fontWeight: '800',
-      color: theme.textPrimary,
-    },
-
-    // Daily Schedule Banner
-    dayBannerCard: {
-      marginHorizontal: 12,
-      marginTop: 8,
       paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 10,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    dayBannerBtn: {
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
-      backgroundColor: theme.surface,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    dayBannerBtnText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.textPrimary,
-    },
-    dayBannerTitle: {
-      fontSize: 12,
-      fontWeight: '800',
-      color: theme.textPrimary,
-      textAlign: 'center',
-    },
-    dayBannerSub: {
-      fontSize: 10,
-      color: theme.textSecondary,
-      textAlign: 'center',
-    },
-
-    // --- 🗂️ EXPLORER "SORT ⌵" & "VIEW ⌵" TOOLBAR STYLES ---
-    viewToolbarContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginHorizontal: 12,
-      marginTop: 10,
-      marginBottom: 4,
-      paddingHorizontal: 4,
-    },
-    viewToolbarLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    viewDropdownTriggerBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 6,
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-      gap: 5,
-    },
-    viewDropdownTriggerBtnActive: {
-      backgroundColor: theme.surface,
-      borderColor: theme.primary,
-    },
-    viewDropdownTriggerText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.textPrimary,
-    },
-    viewDropdownCaret: {
-      fontSize: 8,
-      color: theme.textSecondary,
-      marginLeft: 2,
-    },
-    viewCountLabel: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: theme.textMuted,
-    },
-
-    // Windows Explorer Dropdown Menu Floating Popover
-    explorerMenuBackdrop: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.45)',
-      justifyContent: 'flex-start',
-      paddingTop: 180,
-      paddingHorizontal: 16,
-    },
-    explorerMenuCard: {
-      width: 220,
-      backgroundColor: '#1E2028',
-      borderRadius: 10,
-      paddingVertical: 6,
-      borderWidth: 1,
-      borderColor: '#333846',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.35,
-      shadowRadius: 16,
-      elevation: 12,
-    },
-    explorerMenuItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
       paddingVertical: 7,
-      paddingHorizontal: 10,
+      borderRadius: 6,
     },
-    explorerMenuItemHover: {
-      backgroundColor: '#2A2D39',
+    genBtnDarkText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.textPrimary,
     },
-    explorerBulletCol: {
-      width: 14,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 4,
+    genBtnDanger: {
+      backgroundColor: '#EF4444',
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 6,
     },
-    explorerBulletDot: {
-      fontSize: 13,
-      fontWeight: '900',
+    genBtnDangerText: {
+      fontSize: 12,
+      fontWeight: '700',
       color: '#FFFFFF',
     },
-    explorerMenuIconCol: {
-      width: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 8,
-    },
-    explorerMenuIcon: {
-      fontSize: 13,
-      color: '#CBD5E1',
-    },
-    explorerMenuLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: '#E2E8F0',
-      flex: 1,
-    },
-    explorerMenuDivider: {
-      height: 1,
-      backgroundColor: '#333846',
-      marginVertical: 4,
-      marginHorizontal: 8,
-    },
-
-    // --- 🗂️ COMPACT LIST VIEW LAYOUT ---
-    compactSlotRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.surface,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
-      marginBottom: 6,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderLeftWidth: 4,
-    },
-    compactTimeCol: {
-      width: 65,
-    },
-    compactTimeText: {
-      fontSize: 10,
-      fontWeight: '800',
-      color: theme.textPrimary,
-    },
-    compactSubjectCol: {
-      flex: 1,
-      marginLeft: 6,
-    },
-    compactSubjectTitle: {
-      fontSize: 12,
-      fontWeight: '800',
-      color: theme.textPrimary,
-    },
-    compactTopicText: {
-      fontSize: 9,
-      color: theme.textSecondary,
-    },
-
-    // --- ⊞ TILES / GRID VIEW LAYOUT ---
-    gridStreamRow: {
-      justifyContent: 'space-between',
-      gap: 8,
-    },
-    gridSlotCard: {
-      flex: 1,
-      backgroundColor: theme.surface,
-      borderRadius: 10,
-      padding: 10,
-      marginBottom: 8,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderTopWidth: 3,
-    },
-    gridHeaderRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 4,
-    },
-    gridTimeText: {
-      fontSize: 9,
-      fontWeight: '700',
-      color: theme.textSecondary,
-    },
-    gridSubjectText: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: theme.textPrimary,
-      marginBottom: 2,
-    },
-
-    // --- ⚡ Spaced Repetition Active Recall Cards ---
-    recallDueCard: {
-      marginHorizontal: 12,
-      marginTop: 8,
-      borderRadius: 12,
-      padding: 12,
-      borderWidth: 1,
-      borderColor: '#7E22CE',
-      backgroundColor: '#3B0764',
-    },
-    recallDueHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    recallDueTitle: {
-      color: '#F0ABFC',
-      fontWeight: '800',
-      fontSize: 11,
-      letterSpacing: 0.5,
-    },
-    recallDueCount: {
-      color: '#E879F9',
-      fontSize: 11,
-      fontWeight: '700',
-    },
-    recallDueRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.28)',
-      borderRadius: 8,
-      padding: 8,
-      marginTop: 6,
-    },
-    recallCheckbox: {
-      width: 20,
-      height: 20,
-      borderRadius: 5,
-      borderWidth: 1.5,
-      borderColor: '#E879F9',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    recallCheckboxChecked: {
-      backgroundColor: '#A855F7',
-      borderColor: '#A855F7',
-    },
-    recallCheckmark: {
-      color: '#FFFFFF',
-      fontSize: 12,
-      fontWeight: '800',
-    },
-    recallTopicText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: '#FAF5FF',
-    },
-    recallTopicDone: {
-      textDecorationLine: 'line-through',
-      color: '#D8B4FE',
-    },
-    recallMetaText: {
-      fontSize: 10,
-      color: '#D8B4FE',
-      marginTop: 2,
-    },
-    recallPreviewBox: {
-      padding: 12,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.surfaceElevated,
-      gap: 6,
-    },
-    recallPreviewRow: {
-      fontSize: 12,
-      lineHeight: 18,
-      color: theme.textPrimary,
-    },
-
-    // --- Frequency Selector in Modal ---
-    frequencyToggleRow: {
-      flexDirection: 'row',
-      gap: 6,
-      marginVertical: 4,
-    },
-    frequencyPill: {
-      flex: 1,
+    genBtnPrimary: {
+      backgroundColor: brandBlue,
+      paddingHorizontal: 12,
       paddingVertical: 7,
-      paddingHorizontal: 8,
-      borderRadius: 7,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.surfaceElevated,
-      alignItems: 'center',
+      borderRadius: 6,
     },
-    frequencyPillActive: {
-      backgroundColor: theme.primary,
-      borderColor: theme.primary,
-    },
-    frequencyPillText: {
-      fontSize: 10,
+    genBtnPrimaryText: {
+      fontSize: 12,
       fontWeight: '700',
+      color: '#FFFFFF',
+    },
+    generatorSubNotice: {
+      fontSize: 12,
       color: theme.textSecondary,
+      marginBottom: 12,
     },
-    frequencyPillTextActive: {
-      color: theme.primaryText,
-      fontWeight: '800',
-    },
-
-    // --- Categories Tracker ---
-    categoryTrackerSection: {
-      marginHorizontal: 12,
-      marginTop: 10,
-      marginBottom: 2,
-    },
-    categoryTrackerHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 6,
-    },
-    categoryTrackerTitle: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.textSecondary,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    categoryTrackerAddBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 3,
-    },
-    categoryTrackerAddText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.primary,
-    },
-    categoryRailScroll: {
-      gap: 6,
-      paddingVertical: 2,
-      paddingRight: 10,
-    },
-    categoryPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.surface,
-      borderRadius: 18,
-      paddingHorizontal: 9,
-      paddingVertical: 5,
-      borderWidth: 1,
-      borderColor: theme.border,
-      gap: 5,
-    },
-    categoryPillActive: {
-      borderColor: theme.primary,
-      backgroundColor: theme.surfaceElevated,
-    },
-    categoryPillText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.textPrimary,
-    },
-    categoryCountBadge: {
-      paddingHorizontal: 5,
-      paddingVertical: 1,
-      borderRadius: 8,
-      backgroundColor: theme.surfaceElevated,
-    },
-    categoryCountBadgeText: {
-      fontSize: 9,
-      fontWeight: '800',
-      color: theme.textSecondary,
-    },
-    catDeletePillBtn: {
-      paddingHorizontal: 4,
-      paddingVertical: 2,
-      marginLeft: 2,
-      borderRadius: 8,
-    },
-    catDeletePillText: {
-      fontSize: 10,
-      fontWeight: '800',
-      color: '#EF4444',
-    },
-
-    // --- Timetable Slots Stream ---
-    streamContent: {
-      padding: 12,
-      paddingBottom: 95,
-    },
-    emptyCard: {
-      padding: 24,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginTop: 16,
-      backgroundColor: theme.surface,
+    scheduleTableCard: {
+      backgroundColor: isLight ? '#FFFFFF' : '#131826',
       borderRadius: 12,
-      borderWidth: 1,
-      borderStyle: 'dashed',
-      borderColor: theme.border,
-    },
-    emptyIcon: {
-      fontSize: 36,
-      marginBottom: 8,
-    },
-    emptyTitle: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: theme.textPrimary,
-      marginBottom: 4,
-      textAlign: 'center',
-    },
-    emptySub: {
-      fontSize: 11,
-      color: theme.textSecondary,
-      textAlign: 'center',
-      maxWidth: 280,
-      lineHeight: 16,
-    },
-    slotCard: {
-      backgroundColor: theme.surface,
-      borderRadius: 10,
-      marginBottom: 10,
-      flexDirection: 'row',
       borderWidth: 1,
       borderColor: theme.border,
       overflow: 'hidden',
+      marginBottom: 16,
     },
-    slotCardCompleted: {
-      opacity: 0.75,
-      backgroundColor: theme.surfaceElevated,
-    },
-    slotTypeAccent: {
-      width: 4,
-    },
-    slotBody: {
-      flex: 1,
-      padding: 10,
-    },
-    cardHeaderRow: {
+    scheduleTableHeaderRow: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
+      backgroundColor: isLight ? '#F1F5F9' : '#1A2133',
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    scheduleTimeHeaderCol: {
+      width: 140,
+      paddingVertical: 12,
+      paddingHorizontal: 10,
+      borderRightWidth: 1,
+      borderRightColor: theme.border,
+      justifyContent: 'center',
+    },
+    scheduleTimeHeaderText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.textPrimary,
+    },
+    scheduleDayHeaderCol: {
+      width: 125,
+      paddingVertical: 12,
       alignItems: 'center',
-      marginBottom: 6,
+      justifyContent: 'center',
+      borderRightWidth: 1,
+      borderRightColor: theme.border,
     },
-    typeBadge: {
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 5,
+    scheduleDayHeaderText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.textPrimary,
     },
-    typeBadgeText: {
+    scheduleTableRow: {
+      flexDirection: 'row',
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      minHeight: 70,
+    },
+    scheduleTimeInfoCol: {
+      width: 140,
+      padding: 10,
+      borderRightWidth: 1,
+      borderRightColor: theme.border,
+      justifyContent: 'center',
+    },
+    schedulePeriodLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    schedulePeriodTitle: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.textPrimary,
+    },
+    schedulePeriodRange: {
       fontSize: 10,
-      fontWeight: '700',
+      color: theme.textSecondary,
+      marginTop: 2,
     },
-    timeSpanGroup: {
+    periodActionIcons: {
+      flexDirection: 'row',
+      gap: 4,
+    },
+    periodIconBtn: {
+      padding: 3,
+    },
+    periodIconText: {
+      fontSize: 11,
+      color: theme.textMuted,
+    },
+    scheduleCell: {
+      width: 125,
+      borderRightWidth: 1,
+      borderRightColor: theme.border,
+      padding: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    scheduleCellPlusBtn: {
+      width: '90%',
+      height: '80%',
+      borderRadius: 6,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: isLight ? '#CBD5E1' : '#2C3549',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    scheduleCellPlusText: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: isLight ? '#94A3B8' : '#475569',
+    },
+    scheduleClassBadge: {
+      width: '95%',
+      height: '90%',
+      borderRadius: 6,
+      padding: 6,
+      justifyContent: 'center',
+    },
+    scheduleClassTitle: {
+      fontSize: 11,
+      fontWeight: '900',
+    },
+    scheduleClassDesc: {
+      fontSize: 9,
+      opacity: 0.9,
+      marginTop: 1,
+    },
+    addTimeSlotRow: {
+      alignItems: 'center',
+      paddingVertical: 12,
+      backgroundColor: isLight ? '#F8FAFC' : '#101420',
+    },
+    addTimeSlotBtn: {
+      backgroundColor: isLight ? '#E2E8F0' : '#1E2638',
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: theme.border,
     },
-    timeSpanText: {
-      fontSize: 10,
-      fontWeight: '600',
-      color: theme.textSecondary,
-    },
-    deleteSlotBtn: {
-      padding: 2,
-    },
-    deleteSlotText: {
-      color: '#EF4444',
+    addTimeSlotBtnText: {
       fontSize: 12,
       fontWeight: '700',
-    },
-    subjectText: {
-      fontSize: 14,
-      fontWeight: '800',
       color: theme.textPrimary,
-      marginBottom: 2,
     },
-    topicText: {
-      fontSize: 11,
-      color: theme.textSecondary,
-      marginBottom: 8,
-      lineHeight: 15,
+
+    // ==========================================
+    // 5. MODALS & TEXTINPUT
+    // ==========================================
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.72)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 16,
     },
-    cardFooterRow: {
+    classModalCard: {
+      width: '95%',
+      maxWidth: 460,
+      backgroundColor: isLight ? '#FFFFFF' : '#151922',
+      borderRadius: 12,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    classModalHeaderRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingTop: 8,
-      borderTopWidth: 1,
-      borderTopColor: theme.border,
+      marginBottom: 10,
     },
-    qTargetBadge: {
-      backgroundColor: theme.surfaceElevated,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 5,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    qTargetText: {
-      fontSize: 10,
-      fontWeight: '600',
-      color: theme.textSecondary,
-    },
-    actionBtnGroup: {
-      flexDirection: 'row',
-      gap: 5,
-    },
-    statusBtn: {
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 5,
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    completedActiveBtn: {
-      backgroundColor: '#10B981',
-      borderColor: '#10B981',
-    },
-    skippedActiveBtn: {
-      backgroundColor: '#EF4444',
-      borderColor: '#EF4444',
-    },
-    statusBtnText: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: theme.textSecondary,
-    },
-    statusBtnTextActive: {
-      color: '#FFFFFF',
-    },
-    fabTrigger: {
-      position: 'absolute',
-      bottom: 16,
-      right: 14,
-      backgroundColor: theme.primary,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 24,
-      elevation: 6,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.3,
-      shadowRadius: 6,
-    },
-    fabIcon: {
-      color: theme.primaryText,
-      fontWeight: '700',
-      fontSize: 12,
-    },
-
-    // --- Modals Base ---
-    modalBackdrop: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.75)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 12,
-    },
-    modalCard: {
-      backgroundColor: theme.surface,
-      borderRadius: 14,
-      padding: 14,
-      width: '94%',
-      maxHeight: '90%',
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    modalHeading: {
+    classModalTitle: {
       fontSize: 16,
       fontWeight: '800',
       color: theme.textPrimary,
     },
-    modalSubheading: {
-      fontSize: 11,
-      color: theme.textSecondary,
-      marginBottom: 10,
+    classModalCloseBtn: {
+      padding: 4,
     },
-    fieldLabel: {
+    classModalCloseText: {
+      fontSize: 16,
+      color: theme.textMuted,
+      fontWeight: '700',
+    },
+    formLabel: {
       fontSize: 11,
       fontWeight: '700',
       color: theme.textSecondary,
       marginBottom: 4,
-      marginTop: 6,
-    },
-    categoryLabelRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 6,
-      marginBottom: 4,
-    },
-    addCategoryLink: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.primary,
-    },
-    inlineCategoryBox: {
-      backgroundColor: theme.surfaceElevated,
-      borderRadius: 10,
-      padding: 10,
-      borderWidth: 1,
-      borderColor: theme.primary,
-      marginVertical: 6,
-    },
-    inlineCategoryHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 4,
-    },
-    inlineCategoryTitle: {
-      fontSize: 11,
-      fontWeight: '800',
-      color: theme.textPrimary,
-    },
-    inlineCategoryClose: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.textSecondary,
-      padding: 2,
+      marginTop: 8,
     },
     textInput: {
+      backgroundColor: isLight ? '#F8FAFC' : '#1E2536',
       borderWidth: 1,
       borderColor: theme.border,
-      borderRadius: 7,
-      padding: 8,
-      fontSize: 12,
-      color: theme.textPrimary,
-      backgroundColor: theme.surfaceElevated,
-    },
-    typeSelectorRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 5,
-      marginVertical: 4,
-    },
-    typeChoice: {
-      paddingHorizontal: 9,
-      paddingVertical: 6,
-      borderRadius: 7,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.surfaceElevated,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    typeChoiceText: {
-      fontSize: 11,
-      fontWeight: '600',
-    },
-
-    // --- Digital Watch Controls ---
-    dualWatchContainer: {
-      flexDirection: isDesktop ? 'row' : 'column',
-      gap: 8,
-      marginVertical: 6,
-    },
-    watchCard: {
-      flex: 1,
-      backgroundColor: theme.surfaceElevated,
       borderRadius: 8,
-      padding: 8,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    watchHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 4,
-    },
-    watchHeaderTitle: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: theme.textSecondary,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    watchBigDisplay: {
-      backgroundColor: theme.surface,
-      borderRadius: 6,
-      paddingVertical: 6,
-      paddingHorizontal: 4,
-      borderWidth: 1,
-      borderColor: theme.border,
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: 4,
-      marginBottom: 6,
-    },
-    watchDigitBlock: {
-      alignItems: 'center',
-    },
-    watchBigDigit: {
-      fontSize: 18,
-      fontWeight: '800',
-      color: theme.textPrimary,
-    },
-    watchColon: {
-      fontSize: 18,
-      fontWeight: '800',
-      color: theme.textSecondary,
-    },
-    watchStepperRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: 4,
-    },
-    stepperCol: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.surface,
-      borderRadius: 5,
-      borderWidth: 1,
-      borderColor: theme.border,
-      overflow: 'hidden',
-    },
-    stepperBtn: {
-      paddingVertical: 4,
-      paddingHorizontal: 6,
-    },
-    stepperBtnText: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: theme.primary,
-    },
-    stepperValText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.textPrimary,
-      minWidth: 22,
-      textAlign: 'center',
-    },
-    ampmToggleBtn: {
-      backgroundColor: theme.primary,
-      paddingVertical: 5,
-      paddingHorizontal: 8,
-      borderRadius: 5,
-    },
-    ampmToggleText: {
-      color: theme.primaryText,
-      fontSize: 10,
-      fontWeight: '800',
-    },
-    quickSlotsRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 4,
-      marginTop: 4,
-      marginBottom: 4,
-    },
-    quickSlotChip: {
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-      paddingHorizontal: 7,
-      paddingVertical: 4,
-      borderRadius: 10,
-    },
-    quickSlotChipText: {
-      fontSize: 9,
-      fontWeight: '600',
-      color: theme.textSecondary,
-    },
-    previewBanner: {
-      padding: 6,
-      borderRadius: 6,
-      borderWidth: 1,
-      marginVertical: 6,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    previewBannerValid: {
-      backgroundColor: 'rgba(16, 185, 129, 0.1)',
-      borderColor: 'rgba(16, 185, 129, 0.3)',
-    },
-    previewBannerInvalid: {
-      backgroundColor: 'rgba(239, 68, 68, 0.1)',
-      borderColor: 'rgba(239, 68, 68, 0.3)',
-    },
-    previewBannerText: {
-      fontSize: 10,
-      fontWeight: '700',
-    },
-    modalActionGroup: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      gap: 8,
-      marginTop: 10,
-    },
-    abortBtn: {
       paddingHorizontal: 12,
-      paddingVertical: 6,
+      paddingVertical: 8,
+      fontSize: 13,
+      color: theme.textPrimary,
     },
-    abortBtnText: {
-      color: theme.textMuted,
-      fontWeight: '600',
-      fontSize: 12,
-    },
-    confirmBtn: {
-      backgroundColor: theme.primary,
-      paddingHorizontal: 14,
-      paddingVertical: 6,
-      borderRadius: 7,
-    },
-    confirmBtnDisabled: {
-      opacity: 0.5,
-    },
-    confirmBtnText: {
-      color: theme.primaryText,
-      fontWeight: '700',
-      fontSize: 12,
-    },
-
-    // Category Creator Picker Assets
-    emojiGrid: {
+    colorPickerRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 5,
-      marginVertical: 4,
+      gap: 8,
+      marginVertical: 6,
     },
-    emojiChoice: {
+    colorCircle: {
       width: 32,
       height: 32,
-      borderRadius: 6,
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-      alignItems: 'center',
-      justifyContent: 'center',
+      borderRadius: 8,
     },
-    emojiChoiceActive: {
-      borderColor: theme.primary,
-      backgroundColor: theme.surface,
+    colorCircleSelected: {
+      borderWidth: 3,
+      borderColor: '#FFFFFF',
+      transform: [{ scale: 1.1 }],
     },
-    colorPaletteGrid: {
+    daysCheckboxContainer: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 6,
-      marginVertical: 4,
-    },
-    colorBall: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
-      borderWidth: 2,
-      borderColor: 'transparent',
-    },
-    colorBallActive: {
-      borderColor: '#FFFFFF',
-      transform: [{ scale: 1.15 }],
-    },
-
-    // Theme Picker
-    themeListRow: {
-      gap: 6,
+      gap: 10,
       marginVertical: 6,
     },
-    themeOptionBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: 10,
-      borderRadius: 8,
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    themeOptionBtnActive: {
-      borderColor: theme.primary,
-      backgroundColor: theme.surface,
-    },
-    themeOptionLeft: {
+    dayCheckboxItem: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      width: '45%',
+      marginVertical: 2,
     },
-    themeOptionTitle: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.textPrimary,
-    },
-
-    // --- Notifications Center ---
-    notifToggleCard: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+    checkboxSquare: {
+      width: 18,
+      height: 18,
+      borderRadius: 4,
+      borderWidth: 1.5,
+      borderColor: isLight ? '#94A3B8' : '#4B5563',
       alignItems: 'center',
-      backgroundColor: theme.surfaceElevated,
-      padding: 10,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: theme.border,
-      marginVertical: 4,
-    },
-    notifToggleTitle: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.textPrimary,
-    },
-    notifToggleSubtitle: {
-      fontSize: 10,
-      color: theme.textSecondary,
-      marginTop: 2,
-    },
-    notifSwitchBtn: {
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 12,
-      backgroundColor: theme.border,
-    },
-    notifSwitchBtnActive: {
-      backgroundColor: '#10B981',
-    },
-    notifSwitchText: {
-      fontSize: 10,
-      fontWeight: '800',
-      color: '#FFFFFF',
-    },
-    notifLeadPillsRow: {
-      flexDirection: 'row',
-      gap: 6,
-      marginVertical: 6,
-    },
-    notifLeadPill: {
-      flex: 1,
-      paddingVertical: 6,
-      borderRadius: 6,
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
-      alignItems: 'center',
-    },
-    notifLeadPillActive: {
-      backgroundColor: theme.primary,
-      borderColor: theme.primary,
-    },
-    notifLeadPillText: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: theme.textSecondary,
-    },
-    notifLeadPillTextActive: {
-      color: theme.primaryText,
-    },
-    testAlarmBtn: {
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.primary,
-      paddingVertical: 7,
-      borderRadius: 7,
-      alignItems: 'center',
-      marginVertical: 6,
-    },
-    testAlarmBtnText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.primary,
-    },
-
-    // --- Custom Modal Dialog ---
-    customDialogOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.75)',
       justifyContent: 'center',
-      alignItems: 'center',
-      padding: 16,
-      zIndex: 9999,
     },
-    customDialogCard: {
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
-      width: '100%',
-      maxWidth: 340,
-      borderWidth: 1,
-      borderColor: theme.border,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.25,
-      shadowRadius: 16,
-      elevation: 10,
+    checkboxSquareChecked: {
+      backgroundColor: brandBlue,
+      borderColor: brandBlue,
     },
-    customDialogTitle: {
-      fontSize: 15,
+    checkboxCheckText: {
+      color: '#FFFFFF',
+      fontSize: 11,
       fontWeight: '800',
-      color: theme.textPrimary,
-      marginBottom: 4,
     },
-    customDialogMessage: {
+    dayCheckboxLabel: {
       fontSize: 12,
-      color: theme.textSecondary,
-      lineHeight: 16,
-      marginBottom: 14,
+      fontWeight: '600',
+      color: theme.textPrimary,
     },
-    customDialogBtnGroup: {
+    modalBtnRow: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      gap: 8,
+      marginTop: 18,
+      gap: 10,
     },
-    customDialogCancelBtn: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 7,
-      backgroundColor: theme.surfaceElevated,
-      borderWidth: 1,
-      borderColor: theme.border,
+    cancelBtn: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 6,
+      backgroundColor: isLight ? '#E2E8F0' : '#222838',
     },
-    customDialogCancelText: {
-      fontSize: 11,
+    cancelBtnText: {
+      fontSize: 12,
       fontWeight: '700',
       color: theme.textSecondary,
     },
-    customDialogConfirmBtn: {
-      paddingHorizontal: 14,
-      paddingVertical: 6,
-      borderRadius: 7,
-      backgroundColor: theme.primary,
+    saveBtn: {
+      backgroundColor: brandBlue,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 6,
     },
-    customDialogDangerBtn: {
-      backgroundColor: '#EF4444',
-    },
-    customDialogConfirmText: {
-      fontSize: 11,
-      fontWeight: '700',
+    saveBtnText: {
       color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    // Pomodoro Timer
+    pomodoroContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
+    },
+    pomodoroTimerText: {
+      fontSize: 72,
+      fontWeight: '900',
+      color: theme.textPrimary,
+      fontVariant: ['tabular-nums'],
+      letterSpacing: -1,
+      marginBottom: 24,
+    },
+    pomodoroStartBtn: {
+      backgroundColor: brandBlue,
+      paddingHorizontal: 36,
+      paddingVertical: 12,
+      borderRadius: 30,
+    },
+    pomodoroStartBtnText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '800',
     },
   });
 }

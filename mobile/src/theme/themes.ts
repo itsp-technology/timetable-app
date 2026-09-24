@@ -1,22 +1,18 @@
 // mobile/src/theme/themes.ts
-
-export type ThemeKey = 'midnight' | 'light' | 'oled' | 'forest';
-
 export interface ThemeColors {
   name: string;
   icon: string;
   bg: string;
   surface: string;
   surfaceElevated: string;
-  headerBg: string;
-  headerText: string;
-  textPrimary: string;
-  textSecondary: string;
-  textMuted: string;
   border: string;
   primary: string;
   primaryText: string;
-  accent: string;
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  headerBg: string;
+  headerText: string;
   tabBg: string;
   tabActiveBg: string;
   tabText: string;
@@ -24,89 +20,87 @@ export interface ThemeColors {
   metricsBg: string;
 }
 
+export type ThemeKey = 'smartDark' | 'smartLight' | 'midnight' | 'amoled';
+
 export const THEMES: Record<ThemeKey, ThemeColors> = {
-  midnight: {
-    name: 'Midnight Slate',
+  smartDark: {
+    name: 'Smart Dark',
     icon: '🌙',
-    bg: '#0B0F19',
-    surface: '#111827',
-    surfaceElevated: '#1F2937',
-    headerBg: '#0F172A',
-    headerText: '#FFFFFF',
+    bg: '#0F172A',
+    surface: '#1E293B',
+    surfaceElevated: '#243048',
+    border: '#334155',
+    primary: '#2563EB',
+    primaryText: '#FFFFFF',
     textPrimary: '#F8FAFC',
     textSecondary: '#94A3B8',
     textMuted: '#64748B',
-    border: '#1E293B',
-    primary: '#3B82F6',
-    primaryText: '#FFFFFF',
-    accent: '#38BDF8',
+    headerBg: '#090D16',
+    headerText: '#F8FAFC',
     tabBg: '#1E293B',
-    tabActiveBg: '#3B82F6',
+    tabActiveBg: '#2563EB',
     tabText: '#94A3B8',
     tabActiveText: '#FFFFFF',
-    metricsBg: '#111827',
+    metricsBg: '#1E293B',
   },
-  light: {
-    name: 'Clean Paper',
+  smartLight: {
+    name: 'Smart Light',
     icon: '☀️',
     bg: '#F8FAFC',
     surface: '#FFFFFF',
     surfaceElevated: '#F1F5F9',
-    headerBg: '#FFFFFF',
-    headerText: '#0F172A',
-    textPrimary: '#0F172A',
-    textSecondary: '#475569',
-    textMuted: '#94A3B8',
     border: '#E2E8F0',
     primary: '#2563EB',
     primaryText: '#FFFFFF',
-    accent: '#0284C7',
+    textPrimary: '#0F172A',
+    textSecondary: '#64748B',
+    textMuted: '#94A3B8',
+    headerBg: '#FFFFFF',
+    headerText: '#0F172A',
     tabBg: '#F1F5F9',
-    tabActiveBg: '#0F172A',
+    tabActiveBg: '#2563EB',
     tabText: '#64748B',
     tabActiveText: '#FFFFFF',
     metricsBg: '#FFFFFF',
   },
-  oled: {
+  midnight: {
+    name: 'Midnight',
+    icon: '🌌',
+    bg: '#090E17',
+    surface: '#121927',
+    surfaceElevated: '#1B2438',
+    border: '#2A364F',
+    primary: '#38BDF8',
+    primaryText: '#090E17',
+    textPrimary: '#F1F5F9',
+    textSecondary: '#94A3B8',
+    textMuted: '#64748B',
+    headerBg: '#060A10',
+    headerText: '#F1F5F9',
+    tabBg: '#121927',
+    tabActiveBg: '#38BDF8',
+    tabText: '#94A3B8',
+    tabActiveText: '#090E17',
+    metricsBg: '#121927',
+  },
+  amoled: {
     name: 'OLED Black',
-    icon: '⚡',
+    icon: '⚫',
     bg: '#000000',
     surface: '#0A0A0A',
     surfaceElevated: '#141414',
+    border: '#262626',
+    primary: '#3B82F6',
+    primaryText: '#FFFFFF',
+    textPrimary: '#FFFFFF',
+    textSecondary: '#A3A3A3',
+    textMuted: '#525252',
     headerBg: '#000000',
     headerText: '#FFFFFF',
-    textPrimary: '#EDEDED',
-    textSecondary: '#A1A1AA',
-    textMuted: '#52525B',
-    border: '#27272A',
-    primary: '#06B6D4',
-    primaryText: '#000000',
-    accent: '#22D3EE',
-    tabBg: '#18181B',
-    tabActiveBg: '#27272A',
-    tabText: '#A1A1AA',
-    tabActiveText: '#22D3EE',
-    metricsBg: '#09090B',
-  },
-  forest: {
-    name: 'Deep Forest',
-    icon: '🌲',
-    bg: '#022C22',
-    surface: '#064E3B',
-    surfaceElevated: '#047857',
-    headerBg: '#022C22',
-    headerText: '#ECFDF5',
-    textPrimary: '#ECFDF5',
-    textSecondary: '#A7F3D0',
-    textMuted: '#6EE7B7',
-    border: '#065F46',
-    primary: '#10B981',
-    primaryText: '#FFFFFF',
-    accent: '#34D399',
-    tabBg: '#064E3B',
-    tabActiveBg: '#10B981',
-    tabText: '#A7F3D0',
+    tabBg: '#0A0A0A',
+    tabActiveBg: '#3B82F6',
+    tabText: '#A3A3A3',
     tabActiveText: '#FFFFFF',
-    metricsBg: '#064E3B',
+    metricsBg: '#0A0A0A',
   },
 };
